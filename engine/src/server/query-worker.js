@@ -37,26 +37,33 @@ self.onmessage = (e) => {
     open(path);
     const t0 = performance.now();
     // prepare() (not query()) so statements aren't cached: an early-stopped iterator must not leak into the next call.
+    // Always finalize: an unfinalized statement keeps the file open after close(), which on Windows
+    // blocks deleting old database versions.
     let stmt = db.prepare(sql);
-    // Columns can repeat in a SELECT (e.g. a.id, b.id) and object rows would collapse them.
-    // Wrapping in a subquery makes SQLite give the duplicates distinct names (id, id:1).
-    if (new Set(stmt.columnNames).size !== stmt.columnNames.length) {
-      stmt.finalize();
-      stmt = db.prepare(`SELECT * FROM (${sql})`);
-    }
-    const columns = stmt.columnNames;
-    const rows = [];
-    let truncated = false;
-    // iterate() is lazy: we stop reading as soon as we have enough rows.
-    for (const row of stmt.iterate()) {
-      if (rows.length >= maxRows) {
-        truncated = true;
-        break;
+    try {
+      // Columns can repeat in a SELECT (e.g. a.id, b.id) and object rows would collapse them.
+      // Wrapping in a subquery makes SQLite give the duplicates distinct names (id, id:1).
+      if (new Set(stmt.columnNames).size !== stmt.columnNames.length) {
+        stmt.finalize();
+        stmt = db.prepare(`SELECT * FROM (${sql})`);
       }
-      rows.push(columns.map((c) => row[c]));
+      const columns = stmt.columnNames;
+      const rows = [];
+      let truncated = false;
+      // iterate() is lazy: we stop reading as soon as we have enough rows.
+      for (const row of stmt.iterate()) {
+        if (rows.length >= maxRows) {
+          truncated = true;
+          break;
+        }
+        rows.push(columns.map((c) => row[c]));
+      }
+      postMessage({ id, ok: true, columns, rows, truncated, ms: Math.round(performance.now() - t0) });
+    } finally {
+      try {
+        stmt.finalize();
+      } catch {}
     }
-    stmt.finalize();
-    postMessage({ id, ok: true, columns, rows, truncated, ms: Math.round(performance.now() - t0) });
   } catch (err) {
     postMessage({ id, ok: false, error: String(err?.message || err) });
   }

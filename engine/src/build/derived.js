@@ -68,7 +68,7 @@ export function buildFts(db, ctx) {
     title UNINDEXED, status UNINDEXED, content,
     tokenize = 'unicode61 remove_diacritics 2'
   )`);
-  const ins = db.prepare('INSERT INTO _fts VALUES (?, ?, ?, ?, ?, ?)');
+  const ins = db.query('INSERT INTO _fts VALUES (?, ?, ?, ?, ?, ?)');
   const many = db.transaction((rows) => {
     for (const r of rows) ins.run(...r);
   });
@@ -189,8 +189,8 @@ export function buildSummaries(db, tables, schema, asOf) {
   db.exec(`DROP TABLE IF EXISTS _status_counts`);
   db.exec(`CREATE TABLE _status_counts (table_name TEXT, bim360_project_id TEXT, status TEXT, n INTEGER)`);
 
-  const insT = db.prepare('INSERT INTO _tables VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
-  const insC = db.prepare('INSERT INTO _columns VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  const insT = db.query('INSERT INTO _tables VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+  const insC = db.query('INSERT INTO _columns VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
 
   for (const t of tables) {
     const names = t.columns.map((c) => c.name);
@@ -245,7 +245,7 @@ export function buildSummaries(db, tables, schema, asOf) {
 
 /** Same column stats for views, so forma_describe on a view shows real status_group/status values. */
 export function buildViewStats(db, views) {
-  const insC = db.prepare('INSERT OR REPLACE INTO _columns VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  const insC = db.query('INSERT OR REPLACE INTO _columns VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
   for (const v of views) {
     if (v.status !== 'ok' || !v.rows || v.rows > 1_000_000) continue;
     const cols = db.query(`PRAGMA table_info(${q(v.name)})`).all().map((r) => r.name);

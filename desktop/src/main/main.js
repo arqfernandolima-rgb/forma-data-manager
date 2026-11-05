@@ -129,7 +129,13 @@ function createTray() {
   const img = nativeImage.createFromPath(iconPath('tray.png'));
   tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img);
   tray.setToolTip('Forma Data Manager');
-  const rebuild = () =>
+  let lastKey = null;
+  const rebuild = () => {
+    // Progress updates arrive several times a second; only rebuild the menu when it would change.
+    const key = `${ctx.sync.busy}|${ctx.store.settings().wizardComplete}`;
+    if (key === lastKey) return;
+    lastKey = key;
+    tray.setToolTip(ctx.sync.busy ? 'Forma Data Manager: syncing…' : 'Forma Data Manager');
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: 'Open Forma Data Manager', click: showWindow },
@@ -141,6 +147,7 @@ function createTray() {
         { label: 'Quit', click: () => ((quitting = true), app.quit()) },
       ])
     );
+  };
   rebuild();
   ctx.sync.on('update', rebuild);
   tray.on('click', showWindow);
@@ -218,8 +225,18 @@ function publicState() {
   };
 }
 
+// Throttled: download/build progress can fire several times a second.
+let pushTimer = null;
+let lastPush = 0;
 function pushState() {
-  win?.webContents.send('state', publicState());
+  const send = () => {
+    pushTimer = null;
+    lastPush = Date.now();
+    if (win && !win.isDestroyed()) win.webContents.send('state', publicState());
+  };
+  const wait = 400 - (Date.now() - lastPush);
+  if (wait <= 0 && !pushTimer) send();
+  else if (!pushTimer) pushTimer = setTimeout(send, Math.max(wait, 0));
 }
 
 function registerIpc() {

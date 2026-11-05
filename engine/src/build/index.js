@@ -86,7 +86,7 @@ export async function buildDatabase({ zipPath, csvDir, dataDir, keep = 2, force 
 
     db.exec('DROP TABLE IF EXISTS _views');
     db.exec('CREATE TABLE _views (name TEXT PRIMARY KEY, module TEXT, status TEXT, rows INTEGER, error TEXT, description TEXT)');
-    const insV = db.prepare('INSERT INTO _views VALUES (?,?,?,?,?,?)');
+    const insV = db.query('INSERT INTO _views VALUES (?,?,?,?,?,?)');
     for (const v of views) insV.run(v.name, v.module ?? null, v.status, v.rows ?? null, v.error ?? null, v.description);
 
     // ── 4. Checks ──
@@ -129,7 +129,7 @@ export async function buildDatabase({ zipPath, csvDir, dataDir, keep = 2, force 
       warnings: JSON.stringify(warnings),
       build_complete: '1',
     };
-    const insM = db.prepare('INSERT INTO _meta VALUES (?, ?)');
+    const insM = db.query('INSERT INTO _meta VALUES (?, ?)');
     for (const [k, v] of Object.entries(meta)) insM.run(k, v == null ? null : String(v));
 
     db.exec('PRAGMA analysis_limit = 1000');

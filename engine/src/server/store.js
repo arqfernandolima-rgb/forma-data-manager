@@ -203,9 +203,10 @@ export class Store {
   }
 
   runInline(sql, maxRows) {
+    let stmt;
     try {
       const t0 = performance.now();
-      const stmt = this.db.prepare(sql);
+      stmt = this.db.prepare(sql);
       const columns = stmt.columnNames;
       const rows = [];
       let truncated = false;
@@ -216,10 +217,13 @@ export class Store {
         }
         rows.push(columns.map((c) => row[c]));
       }
-      stmt.finalize();
       return { ok: true, columns, rows, truncated, ms: Math.round(performance.now() - t0) };
     } catch (e) {
       return { ok: false, error: e.message };
+    } finally {
+      try {
+        stmt?.finalize();
+      } catch {}
     }
   }
 }

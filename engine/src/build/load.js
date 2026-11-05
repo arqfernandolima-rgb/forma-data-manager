@@ -32,7 +32,7 @@ export async function loadCsv(db, source, entryName, tableName, schemaCols) {
     const defs = columns.map((c) => `"${c.name}" ${sqlTypeForKind(c.kind)}`).join(', ');
     db.exec(`DROP TABLE IF EXISTS "${tableName}"`);
     db.exec(`CREATE TABLE "${tableName}" (${defs}) STRICT`);
-    const stmt = db.prepare(`INSERT INTO "${tableName}" VALUES (${columns.map(() => '?').join(', ')})`);
+    const stmt = db.query(`INSERT INTO "${tableName}" VALUES (${columns.map(() => '?').join(', ')})`);
     insertMany = db.transaction((items) => {
       for (const r of items) stmt.run(...r);
     });

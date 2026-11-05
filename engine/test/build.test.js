@@ -121,6 +121,26 @@ describe('rollup and summaries', () => {
   });
 });
 
+describe('file handles', () => {
+  // Regression: on Windows, a build that leaves its SQLite handle open can't rename
+  // forma-*.db.partial to forma-*.db (EBUSY). Unfinalized db.prepare() statements cause this.
+  // Linux allows the rename, so check /proc for leftover handles instead.
+  test.skipIf(!fs.existsSync('/proc/self/fd'))('the build process holds no handle on any database file afterwards', async () => {
+    const src = tmpDir('forma-src-fd-');
+    writeMiniExtract(src);
+    const dir = tmpDir('forma-data-fd-');
+    await buildDatabase({ csvDir: src, dataDir: dir });
+    const open = fs.readdirSync('/proc/self/fd').filter((fd) => {
+      try {
+        return fs.readlinkSync(`/proc/self/fd/${fd}`).startsWith(dir);
+      } catch {
+        return false;
+      }
+    });
+    expect(open).toEqual([]);
+  });
+});
+
 describe('versioning', () => {
   test('a second build becomes live and keeps the previous one', async () => {
     const src = tmpDir('forma-src2-');
