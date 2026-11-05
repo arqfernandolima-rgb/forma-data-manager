@@ -1,0 +1,21 @@
+{
+  "name": "forma-data-engine",
+  "version": "4.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Builds a SQLite database from Autodesk Forma Data Connector extracts and serves it to Claude over MCP.",
+  "license": "MIT",
+  "scripts": {
+    "serve": "bun src/cli.js serve",
+    "build-db": "bun src/cli.js build",
+    "test": "bun test",
+    "compile:win": "bun build --compile --minify --target=bun-windows-x64 src/cli.js src/server/query-worker.js --outfile dist/forma-data.exe",
+    "compile:linux": "bun build --compile --minify src/cli.js src/server/query-worker.js --outfile dist/forma-data"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "papaparse": "5.7.0",
+    "yauzl": "3.4.0",
+    "zod": "4.6.7"
+  }
+}

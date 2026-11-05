@@ -1,0 +1,64 @@
+name: Release
+
+# Push a tag like v4.0.0 to build the Windows installer and publish a GitHub Release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check versions match the tag
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          for f in engine/package.json desktop/package.json; do
+            V=$(node -p "require('./$f').version")
+            [ "$V" = "$TAG" ] || { echo "$f is $V but the tag is $TAG"; exit 1; }
+          done
+
+      - name: Test and compile engine
+        working-directory: engine
+        run: |
+          bun install --frozen-lockfile
+          bun test
+          bun run compile:win
+
+      - name: Build installer
+        working-directory: desktop
+        run: |
+          npm ci
+          npm test
+          npm run dist
+
+      - name: Checksums
+        shell: pwsh
+        working-directory: desktop/dist
+        run: |
+          Get-ChildItem *.exe | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Out-File -Encoding ascii SHA256SUMS.txt
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES="Unofficial test build, provided as is. Not an Autodesk product. See DISCLAIMER.md.
+
+          Windows 10/11 x64. The installer is not code-signed, so Windows SmartScreen may warn: choose More info, then Run anyway.
+          Verify the download with SHA256SUMS.txt.
+
+          See CHANGELOG.md for what's new."
+          gh release create "$GITHUB_REF_NAME" desktop/dist/Forma-Data-Manager-Setup-*.exe desktop/dist/SHA256SUMS.txt \
+            --title "Forma Data Manager $GITHUB_REF_NAME" --notes "$NOTES" --prerelease

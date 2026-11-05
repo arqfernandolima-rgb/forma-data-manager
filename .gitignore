@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+engine/dist/
+desktop/dist/
+desktop/build/license.txt
+
+# Data: never commit extracts or databases (they contain your hub's data)
+*.db
+*.db-*
+*.db.partial
+*.db.new
+*.db.bak
+*.zip
+*.zip.part
+*.csv
+current.json
+downloads/
+
+# Secrets and local settings
+.env
+.env.*
+tokens.bin
+.claude/settings.local.json
+
+# Logs and OS files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db

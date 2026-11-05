@@ -1,0 +1,48 @@
+# Windows installer for Forma Data Manager (per-user, no admin rights needed).
+# Build: npm run dist   (expects ../engine/dist/forma-data.exe; see docs/development.md)
+appId: io.github.arqfernandolima.formadatamanager
+productName: Forma Data Manager
+copyright: "Copyright © 2026 Fernando Lima and contributors. MIT License. Not affiliated with or endorsed by Autodesk, Inc."
+directories:
+  output: dist
+  buildResources: build
+files:
+  - src/**/*
+  - assets/**/*
+  - package.json
+  - "!**/*.test.js"
+extraResources:
+  - from: ../engine/dist/forma-data.exe
+    to: engine/forma-data.exe
+  - from: ../skill/forma-data-dashboards
+    to: skill/forma-data-dashboards
+  - from: build/license.txt
+    to: LICENSE-AND-DISCLAIMER.txt
+asar: true
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableCookieEncryption: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  artifactName: Forma-Data-Manager-Setup-${version}.${ext}
+  legalTrademarks: "Autodesk, Autodesk Forma, Autodesk Construction Cloud and BIM 360 are trademarks of Autodesk, Inc. Claude is a trademark of Anthropic, PBC."
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Forma Data Manager
+  # License page: the user must accept the MIT license and the disclaimer to install.
+  license: build/license.txt
+  # The setup wizard (Autodesk sign-in, hub, data folder, Claude Desktop, skill) opens right after install.
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  include: build/installer.nsh
+publish: null

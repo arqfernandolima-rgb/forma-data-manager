@@ -1,0 +1,25 @@
+{
+  "name": "forma-data-manager",
+  "productName": "Forma Data Manager",
+  "version": "4.0.0",
+  "description": "Pulls Autodesk Forma Data Connector extracts on a schedule and serves them to Claude. Unofficial test code, provided as is.",
+  "license": "MIT",
+  "author": "Fernando Lima (community project, not affiliated with Autodesk)",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "prepare-dist": "node scripts/prepare-dist.js",
+    "dist": "node scripts/prepare-dist.js && electron-builder --win nsis --publish never",
+    "dist:dir": "node scripts/prepare-dist.js && electron-builder --win dir --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.9.0",
+    "electron-builder": "26.17.0"
+  },
+  "homepage": "https://github.com/arqfernandolima-rgb/acc-data-mcp-server",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arqfernandolima-rgb/acc-data-mcp-server.git"
+  }
+}

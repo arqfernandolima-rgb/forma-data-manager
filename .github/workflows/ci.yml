@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  engine:
+    name: Engine tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+        working-directory: engine
+      - run: bun test
+        working-directory: engine
+
+  desktop:
+    name: Desktop tests (Linux)
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: desktop
+      - run: npm test
+        working-directory: desktop
+
+  windows:
+    name: Windows build + engine smoke test
+    runs-on: windows-latest
+    needs: [engine, desktop]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Compile engine (forma-data.exe)
+        working-directory: engine
+        run: |
+          bun install --frozen-lockfile
+          bun run compile:win
+
+      - name: Smoke test the compiled engine on Windows
+        working-directory: engine
+        shell: bash
+        run: |
+          bun -e "import { writeMiniExtract } from './test/helpers.js'; import fs from 'node:fs'; fs.mkdirSync('ci-extract', { recursive: true }); writeMiniExtract('ci-extract');"
+          ./dist/forma-data.exe build --csv-dir ci-extract --data-dir ci-data
+          ./dist/forma-data.exe info --data-dir ci-data
+          SMOKE_CALLS='[["forma_overview",{}],["forma_sql",{"sql":"SELECT status_group, COUNT(*) n FROM v_all_issues GROUP BY 1"}],["forma_project_summary",{"project":"Riverside"}],["forma_search",{"query":"fire pump"}]]' \
+            bun scripts/smoke.js ci-data ./dist/forma-data.exe serve 2>&1 | tee smoke.log
+          grep -q '"status_group"' smoke.log
+          if grep -q 'Query worker unavailable' smoke.log; then echo "Query worker did not start in the compiled exe"; exit 1; fi
+
+      - name: Build installer
+        working-directory: desktop
+        run: |
+          npm ci
+          npm run dist
+
+      - name: Checksum
+        shell: pwsh
+        working-directory: desktop/dist
+        run: |
+          Get-ChildItem *.exe | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Out-File -Encoding ascii SHA256SUMS.txt
+          Get-Content SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forma-data-manager-windows
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
