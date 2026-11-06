@@ -10,7 +10,7 @@
 │   scheduler.js   daily at HH:MM, catch-up after sleep/off, skip if synced < 12 h, sign-in keep-alive     │
 │   engine.js      runs forma-data.exe build/info/rollback, parses JSON-lines progress                     │
 │   claude-config  merge into claude_desktop_config.json (both install types), backup first               │
-│   skill.js       skill ZIP for upload, copy for Claude Code                                              │
+│   skill.js       optional: skill ZIP for upload, copy for Claude Code                                    │
 │ renderer         setup wizard + status/history/settings (sandboxed, contextIsolation, strict CSP)        │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────┘
             │ spawns                                                     ▲ reads current.json (status)
@@ -38,6 +38,7 @@
 | **Scalar lookups in views** | Guarantees one row per base record, even when lookup tables contain duplicates |
 | **Precomputed `project_rollup`, `_columns`, `_status_counts`** | Hub-wide answers and column value checks become single, instant queries; the model spends tokens on reasoning, not discovery |
 | **Query worker with timeout** | A runaway query (e.g. an accidental cross join) is abandoned after 30 s while the server keeps answering |
+| **Dashboard guide built into the server** | Claude has no supported way for an app to install a skill into someone's account. Serving the guide as an MCP tool makes it automatic in every client; the plugin/skill stays optional |
 | **Connect first, load data after** | MCP clients time out if a server is slow to start; the server responds to `initialize` immediately |
 
 ## Data folder protocol
@@ -52,9 +53,10 @@
 ## Repository layout
 
 ```
-engine/      forma-data engine (build + MCP server), Bun, tests in engine/test
-desktop/     Forma Data Manager (Electron), tests in desktop/test, installer config
-skill/       forma-data-dashboards skill (also embedded in the engine as the MCP prompt)
-docs/        documentation
-.github/     CI (tests, Windows smoke test, installer artifact) and tagged releases
+engine/         forma-data engine (build + MCP server), Bun, tests in engine/test
+desktop/        Forma Data Manager (Electron), tests in desktop/test, installer config
+claude-plugin/  Claude plugin with the forma-data-dashboards skill (also built into the engine as forma_dashboard_guide)
+.claude-plugin/ marketplace.json: makes this repo a Claude plugin marketplace
+docs/           documentation
+.github/        CI (tests, Windows smoke test, installer artifact) and tagged releases
 ```

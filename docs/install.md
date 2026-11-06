@@ -1,4 +1,4 @@
-# Install, upgrade and uninstall
+# Install, update and uninstall
 
 ## Before you start
 
@@ -26,7 +26,7 @@
 | Data folder | Where databases are stored. Default `%LOCALAPPDATA%\FormaData`. Avoid OneDrive/Dropbox folders: a new multi-GB file is written daily |
 | Schedule | Daily time (default 06:00) and "start with Windows" |
 | Claude Desktop | Adds `forma-data` to `claude_desktop_config.json` (both Claude Desktop install types are handled; files are backed up first) |
-| Dashboard skill | Save a ZIP to upload in Claude, and/or install for Claude Code |
+| Dashboards | Nothing to do: the dashboard guide is built into the server. Optionally add it as a Claude plugin or skill |
 | Finish | Optionally starts the first sync |
 
 Then **fully quit Claude Desktop** (tray icon → Quit) and open it again so it loads the new server.
@@ -43,17 +43,9 @@ You can re-run any step later from **Settings → Run the setup wizard again**.
 | Databases, `current.json`, temporary downloads | The data folder you chose (default `%LOCALAPPDATA%\FormaData`) |
 | Claude Desktop config | `%APPDATA%\Claude\claude_desktop_config.json` (standard installer) or `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude_desktop_config.json` (Microsoft Store/MSIX) |
 
-## Upgrading
+## Updating
 
 Install the new version over the old one. Settings, sign-in, schedule and data are kept, and the Claude Desktop entry keeps working because the app's path doesn't change. If the release notes say the database layout changed, run **Sync now** afterwards.
-
-### Upgrading from v3
-
-v3 was a set of scripts (`server.js`, `build-cache.js`, ZIP drop folder, `acc-data` server). v4 replaces all of it:
-
-- The **Claude Desktop setup** step removes the old `acc-data` entry (leave the checkbox on) and adds `forma-data`, after making a backup.
-- Tool names changed from `acc_*` to `forma_*`. Install the new dashboard skill, which uses the new names, and remove or disable the old skill in Claude.
-- Old databases and ZIPs aren't used. Delete them when you're happy with v4.
 
 ## Uninstall
 

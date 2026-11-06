@@ -4,7 +4,7 @@ import { normalizeValue, kindForSchemaType } from '../src/build/normalize.js';
 const n = (v, k) => normalizeValue(v, k).value;
 
 describe('numbers', () => {
-  test('zero stays zero (the v3 bug turned it into NULL)', () => {
+  test('zero stays zero (naive loaders using `parseInt(v) || null` turn it into NULL)', () => {
     expect(n('0', 'number')).toBe(0);
     expect(n('0.0', 'number')).toBe(0);
     expect(n('-0.25', 'number')).toBe(-0.25);

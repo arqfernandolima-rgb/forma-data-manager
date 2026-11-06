@@ -9,7 +9,7 @@ The database is a read-only SQLite file built from one Data Connector extract. I
 
 | Schema type | Stored as | Rule |
 |---|---|---|
-| `number` | INTEGER or REAL | Only clean numbers convert. `0` stays `0` (v3 turned zeros into NULL). Values with leading zeros (`007`) or letters (`SUB-14-000-0001`) are kept as text and counted as anomalies |
+| `number` | INTEGER or REAL | Only clean numbers convert. `0` stays `0` (a common loader bug turns zeros into NULL). Values with leading zeros (`007`) or letters (`SUB-14-000-0001`) are kept as text and counted as anomalies |
 | `boolean` | 1 / 0 | `t`, `true`, `1` → 1; `f`, `false`, `0` → 0. All three encodings appear in real extracts |
 | `timestamp: SQL` | text `YYYY-MM-DD HH:MM:SS` | Sub-second precision and `Z`/`UTC` suffixes are normalized. Values are UTC as delivered |
 | `date: string` | text `YYYY-MM-DD` | |

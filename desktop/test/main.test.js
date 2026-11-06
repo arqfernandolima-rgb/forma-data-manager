@@ -162,6 +162,34 @@ test('sync: request → wait for job → download ZIP → build → history; dow
   assert.equal(sync.jobsLast24h(), 1);
 });
 
+test('sync: timeline timestamps, per-phase timings in history, and the estimate for next time', async () => {
+  const { fetch } = fakeDcFetch();
+  const { sync, store } = makeSync({ dcFetch: fetch });
+  let clock = Date.parse('2026-11-05T19:00:00Z');
+  sync.now = () => clock;
+  sync.sleep = async () => {
+    clock += 20 * 60_000; // each poll: 20 minutes pass at Autodesk
+  };
+  const seen = new Set();
+  sync.on('update', (st) => {
+    seen.add(st.phase);
+    if (st.phase === 'waiting') {
+      assert.ok(st.timeline.requestedAt);
+      assert.ok(st.lastCheckAt && st.nextCheckAt, 'shows when it last checked and when it checks next');
+    }
+  });
+  assert.equal(sync.estimate().prepareMinutes, null, 'no estimate before the first sync');
+  const entry = await sync.start('manual');
+  assert.ok(['requesting', 'waiting', 'downloading', 'building', 'done'].every((p) => seen.has(p)));
+  assert.equal(entry.prepareMinutes, 40); // two 20-minute polls before the job completed
+  assert.equal(entry.sizeBytes, Buffer.from('PK-fake-zip-bytes').length);
+  const tl = sync.status.timeline;
+  assert.ok(tl.requestedAt && tl.confirmedAt && tl.preparedAt && tl.downloadStartedAt && tl.downloadedAt && tl.buildStartedAt && tl.doneAt);
+  assert.equal(tl.jobId, 'JOB1');
+  assert.deepEqual(sync.estimate(), { prepareMinutes: 40, sizeBytes: entry.sizeBytes, basedOn: 1 });
+  assert.equal(store.history()[0].prepareMinutes, 40);
+});
+
 test('sync: truncated download is retried and finally fails without building', async () => {
   const { fetch } = fakeDcFetch({ truncate: true });
   const { sync, store, builds } = makeSync({ dcFetch: fetch });
@@ -229,7 +257,7 @@ test('scheduler: runs once a day after the set time, catches up, skips after a r
   assert.equal(sch.nextRun().getDate(), 7);
 });
 
-test('Claude Desktop config: merges, backs up, removes legacy entry, leaves invalid JSON alone', () => {
+test('Claude Desktop config: merges, backs up, keeps other servers, leaves invalid JSON alone', () => {
   const root = tmp();
   process.env.APPDATA = path.join(root, 'Roaming');
   process.env.LOCALAPPDATA = path.join(root, 'Local');
@@ -237,7 +265,7 @@ test('Claude Desktop config: merges, backs up, removes legacy entry, leaves inva
   const store = path.join(process.env.LOCALAPPDATA, 'Packages', 'Claude_pzs8sxrjxfjjc', 'LocalCache', 'Roaming', 'Claude');
   fs.mkdirSync(regular, { recursive: true });
   fs.mkdirSync(store, { recursive: true });
-  fs.writeFileSync(path.join(regular, 'claude_desktop_config.json'), JSON.stringify({ mcpServers: { other: { command: 'x' }, 'acc-data': { command: 'old' } }, preferences: { a: 1 } }));
+  fs.writeFileSync(path.join(regular, 'claude_desktop_config.json'), JSON.stringify({ mcpServers: { other: { command: 'x' }, 'forma-data': { command: 'old.exe' } }, preferences: { a: 1 } }));
   fs.writeFileSync(path.join(store, 'claude_desktop_config.json'), '{ not json');
 
   const res = claudeConfig.install('C:\\Apps\\forma-data.exe', 'D:\\FormaData');
@@ -245,7 +273,6 @@ test('Claude Desktop config: merges, backs up, removes legacy entry, leaves inva
   const badRes = res.find((r) => r.kind === 'store');
   assert.equal(okRes.ok, true);
   assert.ok(fs.existsSync(okRes.backup));
-  assert.deepEqual(okRes.removedLegacy, ['acc-data']);
   const cfg = JSON.parse(fs.readFileSync(path.join(regular, 'claude_desktop_config.json'), 'utf8'));
   assert.deepEqual(cfg.mcpServers['forma-data'], { command: 'C:\\Apps\\forma-data.exe', args: ['serve'], env: { FORMA_DATA_DIR: 'D:\\FormaData' } });
   assert.deepEqual(cfg.mcpServers.other, { command: 'x' });
@@ -258,7 +285,7 @@ test('Claude Desktop config: merges, backs up, removes legacy entry, leaves inva
 });
 
 test('skill ZIP: folder inside, valid archive, edited SKILL.md validated', () => {
-  const src = path.join(__dirname, '..', '..', 'skill', 'forma-data-dashboards');
+  const src = path.join(__dirname, '..', '..', 'claude-plugin', 'skills', 'forma-data-dashboards');
   const out = skill.writeSkillZip(src, tmp());
   const buf = fs.readFileSync(out);
   assert.equal(buf.readUInt32LE(0), 0x04034b50);

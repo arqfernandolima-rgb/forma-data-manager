@@ -12,6 +12,19 @@ A sync gets a fresh copy of the whole hub from Autodesk and rebuilds the local d
 | Building | `forma-data.exe build`: schema-typed load, indexes, views, search index, rollup, column stats, integrity check | under a minute for ~3M rows |
 | Done | `current.json` points to the new database. Running MCP servers switch within about 3 seconds | — |
 
+## What you see while it runs
+
+The Status page shows a timeline with a time for each step:
+
+1. **Extraction requested**: sent to Data Connector.
+2. **Confirmed by Autodesk**: the job ID.
+3. **Autodesk prepares your extract**: how long it has been running, when the app last checked and when it checks next, and an estimate. The estimate is the typical time from your last syncs; for the first sync it shows a typical range. There's no progress bar here, because Autodesk doesn't report progress, and a moving bar would suggest it's almost done. You can close the window: the app keeps checking from the tray.
+4. **Download**: a real progress bar with size, speed and time left.
+5. **Build the database**: table X of Y, then indexes, views and summaries.
+6. **Ready for Claude**: the new "data as of" date.
+
+When a sync finishes or fails, Windows shows a notification if the window isn't in front (always for scheduled syncs). Clicking it opens the app. History keeps how long each phase took.
+
 The in-flight state is saved after every step (`%APPDATA%\Forma Data Manager\sync-state.json`). If you close the app or restart Windows while Autodesk is still preparing the extract, the app **resumes the same job** next time instead of starting a new one.
 
 ## Schedule rules

@@ -64,9 +64,10 @@ jobs:
           bun -e "import { writeMiniExtract } from './test/helpers.js'; import fs from 'node:fs'; fs.mkdirSync('ci-extract', { recursive: true }); writeMiniExtract('ci-extract');"
           ./dist/forma-data.exe build --csv-dir ci-extract --data-dir ci-data
           ./dist/forma-data.exe info --data-dir ci-data
-          SMOKE_CALLS='[["forma_overview",{}],["forma_sql",{"sql":"SELECT status_group, COUNT(*) n FROM v_all_issues GROUP BY 1"}],["forma_project_summary",{"project":"Riverside"}],["forma_search",{"query":"fire pump"}]]' \
+          SMOKE_CALLS='[["forma_overview",{}],["forma_sql",{"sql":"SELECT status_group, COUNT(*) n FROM v_all_issues GROUP BY 1"}],["forma_project_summary",{"project":"Riverside"}],["forma_search",{"query":"fire pump"}],["forma_dashboard_guide",{}]]' \
             bun scripts/smoke.js ci-data ./dist/forma-data.exe serve 2>&1 | tee smoke.log
           grep -q '"status_group"' smoke.log
+          grep -Eq 'forma_dashboard_guide \{\}  →  [0-9]{4,} chars' smoke.log || { echo "Dashboard guide is not embedded in the compiled exe"; exit 1; }
           if grep -q 'Query worker unavailable' smoke.log; then echo "Query worker did not start in the compiled exe"; exit 1; fi
 
       - name: Build installer

@@ -108,28 +108,49 @@ class SyncManager extends EventEmitter {
     this.store.setSyncState(state);
   }
 
+  /**
+   * Timeline shown in the app. Timestamps are kept in the saved sync state,
+   * so a resumed sync still shows when each step really happened.
+   */
+  mark(state, patch) {
+    state.timeline = { ...(state.timeline || {}), ...patch };
+    this.save(state);
+    this.setStatus({ timeline: state.timeline });
+  }
+
+  /** How long Autodesk took to prepare recent extracts, and how big they were (from history). */
+  estimate() {
+    const ok = this.store.history().filter((h) => h.status === 'success' && h.prepareMinutes != null).slice(0, 5);
+    if (!ok.length) return { prepareMinutes: null, sizeBytes: null, basedOn: 0 };
+    const m = ok.map((h) => h.prepareMinutes).sort((a, b) => a - b);
+    const median = m.length % 2 ? m[(m.length - 1) / 2] : (m[m.length / 2 - 1] + m[m.length / 2]) / 2;
+    return { prepareMinutes: Math.max(1, Math.round(median)), sizeBytes: ok[0].sizeBytes ?? null, basedOn: ok.length };
+  }
+
   async pipeline(state, signal) {
     const s = this.store.settings();
     const t0 = Date.parse(state.startedAt) || this.now();
-    this.setStatus({ phase: state.phase, trigger: state.trigger, startedAt: state.startedAt, message: 'Starting…', progress: null, error: null });
+    const iso = () => new Date(this.now()).toISOString();
+    state.timeline = state.timeline || {};
+    this.setStatus({ phase: state.phase, trigger: state.trigger, startedAt: state.startedAt, message: null, progress: null, error: null, timeline: state.timeline, estimate: this.estimate(), lastResult: null });
 
     // 1. Request
     if (!state.requestId) {
-      this.setStatus({ phase: 'requesting', message: 'Asking Data Connector for a fresh extract…' });
+      this.setStatus({ phase: 'requesting', message: 'Sending the extraction request to Autodesk Data Connector…' });
       const desc = `Forma Data Manager ${state.trigger} ${new Date(t0).toISOString().slice(0, 16).replace('T', ' ')}Z`;
       const req = await this.dc.createOneTimeRequest(state.accountId, desc);
       if (!req?.id) throw new Error('Data Connector did not return a request id.');
       state.requestId = req.id;
       state.phase = 'waiting';
-      this.save(state);
-      const owned = [...(this.store.settings().ownedRequests || []), { id: req.id, accountId: state.accountId, createdAt: new Date(this.now()).toISOString() }];
+      this.mark(state, { requestedAt: iso(), requestId: req.id });
+      const owned = [...(this.store.settings().ownedRequests || []), { id: req.id, accountId: state.accountId, createdAt: iso() }];
       this.store.updateSettings({ ownedRequests: owned.slice(-200) });
       this.log.info(`Created Data Connector request ${req.id}`);
       const used = this.jobsLast24h();
       if (used >= JOB_WARN) this.setStatus({ warning: `${used} of ${JOB_LIMIT} Data Connector jobs used in the last 24 hours.` });
     }
 
-    // 2. Wait for the job
+    // 2. Wait for Autodesk to prepare the extract
     if (state.phase === 'waiting') {
       const waitStart = this.now();
       let polls = 0;
@@ -140,73 +161,106 @@ class SyncManager extends EventEmitter {
           const job = jobs.sort((a, b) => String(b.createdAt || b.startedAt || '').localeCompare(String(a.createdAt || a.startedAt || '')))[0];
           if (job?.id) {
             state.jobId = job.id;
-            this.save(state);
+            this.mark(state, { confirmedAt: iso(), jobId: job.id });
             this.log.info(`Job ${job.id} created (status ${job.status})`);
           } else if (this.now() - waitStart > WAIT_FOR_JOB_MS) {
             throw new Error('Data Connector accepted the request but no job started within 45 minutes. Check Data Connector in Forma, then try again.');
           }
         }
+        let jobStatus = null;
         if (state.jobId) {
           const job = await this.dc.getJob(state.accountId, state.jobId);
           const outcome = jobOutcome(job);
-          const elapsedMin = Math.round((this.now() - (Date.parse(state.startedAt) || waitStart)) / 60_000);
-          this.setStatus({ phase: 'waiting', message: `Autodesk is preparing the extract (job ${String(job?.status || 'queued').toLowerCase()}, ${elapsedMin} min so far)…`, job: { id: state.jobId, status: job?.status, completionStatus: job?.completionStatus } });
+          jobStatus = job?.status ?? null;
           if (outcome === 'success') break;
           if (outcome === 'failed') throw new Error(`The Data Connector job ended with status "${job?.status}"${job?.completionStatus ? ` / "${job.completionStatus}"` : ''}. Check Data Connector in Forma for details.`);
           if (this.now() - waitStart > WAIT_FOR_RESULT_MS) throw new Error('The Data Connector job is still running after 10 hours. It may finish later; run Sync now again to pick it up.');
         }
         polls++;
-        await this.sleep(polls < 10 ? 20_000 : 60_000, signal);
+        const waitMs = polls < 10 ? 20_000 : 60_000;
+        this.setStatus({
+          phase: 'waiting',
+          message: null,
+          job: { id: state.jobId, status: jobStatus },
+          lastCheckAt: iso(),
+          nextCheckAt: new Date(this.now() + waitMs).toISOString(),
+        });
+        await this.sleep(waitMs, signal);
       }
       state.phase = 'downloading';
-      this.save(state);
+      this.mark(state, { preparedAt: iso() });
     }
 
     // 3. Download
     const downloads = path.join(s.dataDir, 'downloads');
     if (state.phase === 'downloading') {
-      this.setStatus({ phase: 'downloading', message: 'Listing extract files…', progress: null });
+      this.setStatus({ phase: 'downloading', message: 'Listing the extract files…', progress: null });
       const listing = await this.dc.dataListing(state.accountId, state.jobId);
       const zip = listing.find((f) => f.name === 'autodesk_data_extract.zip') || listing.find((f) => /\.zip$/i.test(f.name));
-      if (zip) {
-        const dest = path.join(downloads, `${state.jobId}.zip`);
-        await this.dc.download(state.accountId, state.jobId, zip.name, dest, {
-          expectedSize: Number(zip.size) || undefined,
-          signal,
-          onProgress: ({ done, total }) => this.setStatus({ message: `Downloading extract… ${fmtMb(done)}${total ? ` of ${fmtMb(total)}` : ''}`, progress: total ? done / total : null }),
+      const dlStart = this.now();
+      this.mark(state, { downloadStartedAt: iso() });
+      const progress = (done, total, label) => {
+        const secs = Math.max(0.5, (this.now() - dlStart) / 1000);
+        const rate = done / secs;
+        this.setStatus({
+          message: label,
+          progress: total ? done / total : null,
+          download: { done, total, bytesPerSec: rate, secondsLeft: total && rate > 0 ? Math.round((total - done) / rate) : null },
         });
+      };
+      if (zip) {
+        const total = Number(zip.size) || undefined;
+        this.mark(state, { downloadBytes: total ?? null, downloadName: zip.name });
+        const dest = path.join(downloads, `${state.jobId}.zip`);
+        const r = await this.dc.download(state.accountId, state.jobId, zip.name, dest, {
+          expectedSize: total,
+          signal,
+          onProgress: ({ done, total: t }) => progress(done, t, `Downloading ${fmtMb(done)}${t ? ` of ${fmtMb(t)}` : ''}`),
+        });
+        this.mark(state, { downloadBytes: r.size });
         state.input = { zipPath: dest };
       } else {
         // No bundled ZIP in the listing: fetch the CSVs and schema files individually.
         const files = listing.filter((f) => /\.csv$/i.test(f.name) || /^schemas\/.*\.json$/i.test(f.name));
         if (!files.length) throw new Error('The finished job has no data files.');
+        const totalBytes = files.reduce((a, f) => a + (Number(f.size) || 0), 0) || null;
+        this.mark(state, { downloadBytes: totalBytes, downloadName: `${files.length} files` });
         const dir = path.join(downloads, state.jobId);
+        let doneBytes = 0;
         let i = 0;
         for (const f of files) {
           i++;
-          this.setStatus({ message: `Downloading ${f.name} (${i}/${files.length})…`, progress: i / files.length });
-          await this.dc.download(state.accountId, state.jobId, f.name, path.join(dir, ...f.name.split('/')), { expectedSize: Number(f.size) || undefined, signal });
+          const r = await this.dc.download(state.accountId, state.jobId, f.name, path.join(dir, ...f.name.split('/')), { expectedSize: Number(f.size) || undefined, signal });
+          doneBytes += r.size;
+          progress(doneBytes, totalBytes || 0, `Downloading file ${i} of ${files.length}`);
         }
         state.input = { csvDir: dir };
       }
       state.phase = 'building';
-      this.save(state);
+      this.mark(state, { downloadedAt: iso() });
     }
 
     // 4. Build
     let result;
     if (state.phase === 'building') {
+      this.mark(state, { buildStartedAt: iso() });
       result = await this.build(state, { force: !!state.force, signal });
     }
 
     // 5. Done
     const finished = this.now();
+    const tl = state.timeline || {};
+    const minutesBetween = (a, b) => (a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 6000) / 10 : null);
     const entry = {
       status: 'success',
       trigger: state.trigger,
       startedAt: state.startedAt,
       finishedAt: new Date(finished).toISOString(),
       minutes: Math.round((finished - t0) / 6000) / 10,
+      prepareMinutes: minutesBetween(tl.requestedAt || state.startedAt, tl.preparedAt),
+      downloadMinutes: minutesBetween(tl.downloadStartedAt, tl.downloadedAt),
+      buildMinutes: minutesBetween(tl.buildStartedAt, new Date(finished).toISOString()),
+      sizeBytes: tl.downloadBytes ?? null,
       jobId: state.jobId,
       requestId: state.requestId,
       asOf: result?.as_of,
@@ -220,16 +274,16 @@ class SyncManager extends EventEmitter {
     this.store.addHistory(entry);
     this.store.setSyncState(null);
     this.removeDownload(state);
-    this.setStatus({ phase: 'done', message: `Done. Data as of ${result?.as_of}, ${Number(result?.rows || 0).toLocaleString()} rows.`, progress: 1, lastResult: entry });
-    this.log.info(`Sync complete: as_of ${result?.as_of}, ${result?.rows} rows, ${entry.minutes} min`);
-    if (state.trigger === 'scheduled') this.notify('Forma data updated', `Data as of ${result?.as_of}.`);
+    this.setStatus({ phase: 'done', message: `Data as of ${result?.as_of}, ${Number(result?.rows || 0).toLocaleString()} rows.`, progress: 1, timeline: { ...tl, doneAt: entry.finishedAt }, lastResult: entry, download: null, build: null });
+    this.log.info(`Sync complete: as_of ${result?.as_of}, ${result?.rows} rows, ${entry.minutes} min (Autodesk ${entry.prepareMinutes} min)`);
+    this.notify('Forma data updated', `Data as of ${result?.as_of}. Took ${fmtDuration(entry.minutes)}.`, { trigger: state.trigger });
     this.cleanupRequests(state.requestId).catch((e) => this.log.warn(`Request cleanup: ${e.message}`));
     return entry;
   }
 
   async build(state, { force, signal }) {
     const s = this.store.settings();
-    this.setStatus({ phase: 'building', message: 'Building the database…', progress: 0 });
+    this.setStatus({ phase: 'building', message: 'Starting the build…', progress: 0, download: null });
     try {
       return await this.engine.build({
         ...state.input,
@@ -238,8 +292,11 @@ class SyncManager extends EventEmitter {
         force,
         onEvent: (e) => {
           if (signal?.aborted) return;
-          if (e.event === 'table') this.setStatus({ message: `Loading tables (${e.index}/${e.total}): ${e.table}`, progress: (e.index / e.total) * 0.8 });
-          if (e.event === 'phase') this.setStatus({ message: `Building ${e.name}…`, progress: { indexes: 0.82, views: 0.86, search: 0.9, summaries: 0.94, finalize: 0.98 }[e.name] ?? null });
+          if (e.event === 'table') this.setStatus({ message: `Loading table ${e.index} of ${e.total}: ${e.table}`, progress: (e.index / e.total) * 0.8, build: { index: e.index, total: e.total } });
+          if (e.event === 'phase') {
+            const label = { indexes: 'Creating indexes', views: 'Building views', search: 'Building the search index', summaries: 'Computing summaries', finalize: 'Checking the database' }[e.name] || e.name;
+            this.setStatus({ message: `${label}…`, progress: { indexes: 0.82, views: 0.86, search: 0.9, summaries: 0.94, finalize: 0.98 }[e.name] ?? null });
+          }
         },
       });
     } catch (e) {
@@ -293,7 +350,7 @@ class SyncManager extends EventEmitter {
     }
     this.setStatus({ phase: entry.status, message: e.message, error: cancelled ? null : e.message, progress: null });
     (cancelled ? this.log.info : this.log.error)(`Sync ${entry.status}: ${e.message}`);
-    if (!cancelled && state.trigger === 'scheduled') this.notify('Forma data sync failed', e.message.slice(0, 180));
+    if (!cancelled) this.notify('Forma data sync failed', e.message.slice(0, 180), { trigger: state.trigger });
     return entry;
   }
 
@@ -331,6 +388,15 @@ class SyncManager extends EventEmitter {
     }
     this.store.updateSettings({ ownedRequests: remaining });
   }
+}
+
+function fmtDuration(min) {
+  if (min == null) return 'a few minutes';
+  if (min < 1) return 'under a minute';
+  if (min < 60) return `${Math.round(min)} min`;
+  const h = Math.floor(min / 60);
+  const m = Math.round(min - h * 60);
+  return m ? `${h} h ${m} min` : `${h} h`;
 }
 
 function fmtMb(b) {

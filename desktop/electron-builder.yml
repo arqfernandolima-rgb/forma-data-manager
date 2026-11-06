@@ -14,7 +14,7 @@ files:
 extraResources:
   - from: ../engine/dist/forma-data.exe
     to: engine/forma-data.exe
-  - from: ../skill/forma-data-dashboards
+  - from: ../claude-plugin/skills/forma-data-dashboards
     to: skill/forma-data-dashboards
   - from: build/license.txt
     to: LICENSE-AND-DISCLAIMER.txt

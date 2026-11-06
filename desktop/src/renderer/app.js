@@ -102,7 +102,7 @@ function apsSteps() {
 }
 
 // ── wizard ──────────────────────────────────────────────────────────────────
-const STEPS = ['Welcome', 'Autodesk app', 'Sign in', 'Hub', 'Data folder', 'Schedule', 'Claude Desktop', 'Dashboard skill', 'Finish'];
+const STEPS = ['Welcome', 'Autodesk app', 'Sign in', 'Hub', 'Data folder', 'Schedule', 'Claude Desktop', 'Dashboards', 'Finish'];
 
 function renderWizard() {
   const side = h('ol', { class: 'wsteps' }, STEPS.map((name, i) => h('li', { class: i < wizardStep ? 'done' : i === wizardStep ? 'current' : '' }, h('span', { class: 'n' }, i < wizardStep ? '✓' : String(i + 1)), name)));
@@ -307,58 +307,96 @@ function claudeStatusList() {
     h('tr', {}, h('th', {}, 'Location'), h('th', {}, 'Status'), h('th', {}, 'Config file')),
     S.claude.map((c) => {
       const [label, kind] = states[c.state] || [c.state, 'info'];
-      return h('tr', {}, h('td', { text: kinds[c.kind] || c.kind }), h('td', {}, badge(label, kind), c.legacy?.length ? h('div', { class: 'small muted', text: `Old entry found: ${c.legacy.join(', ')}` }) : null), h('td', { class: 'mono small', text: c.file }));
+      return h('tr', {}, h('td', { text: kinds[c.kind] || c.kind }), h('td', {}, badge(label, kind)), h('td', { class: 'mono small', text: c.file }));
     })
   );
 }
 
-async function doInstallClaude(removeLegacy) {
-  const res = await call(fdm.installClaude, { removeLegacy });
+async function doInstallClaude() {
+  const res = await call(fdm.installClaude);
   const ok = res.filter((r) => r.ok);
   const bad = res.filter((r) => !r.ok);
   if (ok.length) toast('Claude Desktop is set up. Restart Claude Desktop to load it.');
   await refresh();
-  return h('div', {}, ok.map((r) => banner('ok', `Updated ${r.file}`, r.backup ? h('div', { class: 'small', text: `Backup: ${r.backup}` }) : null, r.removedLegacy?.length ? h('div', { class: 'small', text: `Removed old entry: ${r.removedLegacy.join(', ')}` }) : null)), bad.map((r) => banner('bad', `${r.file}: ${r.error}`)));
+  return h('div', {}, ok.map((r) => banner('ok', `Updated ${r.file}`, r.backup ? h('div', { class: 'small', text: `Backup: ${r.backup}` }) : null)), bad.map((r) => banner('bad', `${r.file}: ${r.error}`)));
 }
 
 function wClaude() {
   const out = h('div', {});
-  const legacy = h('input', { type: 'checkbox', checked: true });
   const anyFound = S.claude.some((c) => c.state !== 'not-installed');
   return h(
     'div',
     {},
     h('h1', {}, 'Connect Claude Desktop'),
     h('p', { class: 'lead' }, 'Adds the ', h('span', { class: 'mono' }, 'forma-data'), ' server to Claude Desktop’s config. Your other MCP servers and settings are kept, and the file is backed up first.'),
-    h('div', { class: 'card' }, claudeStatusList(), !anyFound ? banner('warn', 'Claude Desktop wasn’t found for this Windows user. Install it from claude.ai/download and open it once, then click Set up. You can also do this later under Claude setup.') : null, h('label', { class: 'check' }, legacy, h('span', {}, 'Remove the old "acc-data" entry if it exists')), h('div', { class: 'row' }, btn('Set up Claude Desktop', async () => out.replaceChildren(await doInstallClaude(legacy.checked)), 'primary')), out),
+    h('div', { class: 'card' }, claudeStatusList(), !anyFound ? banner('warn', 'Claude Desktop wasn’t found for this Windows user. Install it from claude.ai/download and open it once, then click Set up. You can also do this later under Claude setup.') : null, h('div', { class: 'row' }, btn('Set up Claude Desktop', async () => out.replaceChildren(await doInstallClaude()), 'primary')), out),
     h('details', { class: 'card' }, h('summary', {}, 'Using Claude Code instead?'), h('p', { class: 'small muted' }, 'Run this once in a terminal:'), S.claudeCodeCommand ? copybox(S.claudeCodeCommand) : null),
     wNav({ skip: () => ((wizardStep = 7), render()) })
   );
 }
 
+const MARKETPLACE_REPO = 'arqfernandolima-rgb/acc-data-mcp-server';
+
+function guideBuiltIn() {
+  return banner(
+    'ok',
+    h('b', {}, 'Built in, nothing to install. '),
+    'The forma-data server includes the dashboard guide (house style plus the data rules that keep numbers right). Claude loads it on its own when you ask for a dashboard, in Claude Desktop, Cowork and Claude Code.'
+  );
+}
+
 function skillTools() {
   const editor = h('textarea', { spellcheck: 'false' });
-  const editorWrap = h('details', {}, h('summary', {}, 'Customize the skill before saving (colors, KPIs, tone…)'), editor);
+  const editorWrap = h('details', {}, h('summary', {}, 'Customize the skill before saving (colors, KPIs, tone\u2026)'), editor);
   fdm.getSkill().then((r) => r.ok && (editor.value = skillDraft ?? r.value));
   editor.addEventListener('input', () => (skillDraft = editor.value));
   const md = () => (skillDraft != null ? skillDraft : null);
   return h(
     'div',
     {},
-    h('div', { class: 'card' }, h('h2', {}, 'Claude Desktop and claude.ai'), h('ol', { class: 'steps' }, h('li', {}, 'Click ', h('b', {}, 'Save skill ZIP'), ' (it goes to your Downloads folder).'), h('li', {}, 'In Claude, open ', link('Settings → Capabilities', 'https://claude.ai/settings/capabilities'), ', make sure code execution is on, and under Skills choose ', h('b', {}, 'Upload skill'), '.'), h('li', {}, 'Pick the ZIP. The skill is now available in every chat.')), h('div', { class: 'row' }, btn('Save skill ZIP', async () => {
-      const p = await call(fdm.saveSkillZip, md());
-      toast(`Saved ${p}`);
-    }, 'primary'))),
-    h('div', { class: 'card' }, h('h2', {}, 'Claude Code'), h('p', { class: 'muted' }, 'Copies the skill to your user skills folder (~/.claude/skills).'), btn('Install for Claude Code', async () => {
-      const p = await call(fdm.installSkillClaudeCode, md());
-      toast(`Installed to ${p}`);
-    })),
-    h('div', { class: 'card' }, h('p', { class: 'muted small' }, 'No upload needed to get started: the MCP server also offers the same guide as the ', h('b', {}, 'forma_dashboard'), ' prompt (in Claude Desktop, use the + menu → forma-data).'), editorWrap)
+    h(
+      'div',
+      { class: 'card' },
+      h('h2', {}, 'As a Claude plugin (updates itself)'),
+      h('p', { class: 'muted small' }, 'Optional. Adds the same guide as a skill, kept up to date from GitHub. Claude doesn\u2019t let other apps add plugins or skills to your account, so this one-time step happens in Claude:'),
+      h('ol', { class: 'steps' }, h('li', {}, 'In Claude, open ', h('b', {}, 'Customize \u2192 Plugins'), '.'), h('li', {}, 'Choose ', h('b', {}, 'Add \u2192 Add marketplace \u2192 Add from a repository'), ' and enter:', copybox(MARKETPLACE_REPO)), h('li', {}, 'Install the ', h('b', {}, 'forma-data'), ' plugin.'))
+    ),
+    h(
+      'div',
+      { class: 'card' },
+      h('h2', {}, 'As an uploaded skill'),
+      h('p', { class: 'muted small' }, 'Optional. Use this if you want to customize the guide.'),
+      h('ol', { class: 'steps' }, h('li', {}, 'Click ', h('b', {}, 'Save skill ZIP'), ' (it goes to your Downloads folder).'), h('li', {}, 'In Claude, open ', h('b', {}, 'Customize \u2192 Skills'), ', click ', h('b', {}, '+ \u2192 Create skill \u2192 Upload a skill'), ', and pick the ZIP.'), h('li', { class: 'muted small' }, 'Skills need code execution turned on (Settings \u2192 Capabilities).')),
+      h('div', { class: 'row' }, btn('Save skill ZIP', async () => {
+        const p = await call(fdm.saveSkillZip, md());
+        toast(`Saved ${p}`);
+      })),
+      editorWrap
+    ),
+    h(
+      'div',
+      { class: 'card' },
+      h('h2', {}, 'Claude Code'),
+      h('p', { class: 'muted small' }, 'Optional. Copy the skill to your user skills folder (~/.claude/skills), or add the plugin from a terminal:'),
+      copybox(`claude plugin marketplace add ${MARKETPLACE_REPO} && claude plugin install forma-data@forma-data`),
+      h('div', { class: 'row' }, btn('Install for Claude Code', async () => {
+        const p = await call(fdm.installSkillClaudeCode, md());
+        toast(`Installed to ${p}`);
+      }))
+    )
   );
 }
 
 function wSkill() {
-  return h('div', {}, h('h1', {}, 'Dashboard skill'), h('p', { class: 'lead' }, 'A prepackaged skill that teaches Claude the house style for Forma dashboards and the data rules that keep numbers right (status groups, change-order chains, cost variance sign, and more).'), skillTools(), wNav({ skip: () => ((wizardStep = 8), render()) }));
+  return h(
+    'div',
+    {},
+    h('h1', {}, 'Dashboards'),
+    h('p', { class: 'lead' }, 'Claude builds dashboards from your Forma data using a house style and data rules (status groups, change-order chains, cost variance sign, demo-project labels, and more).'),
+    guideBuiltIn(),
+    h('details', { class: 'card' }, h('summary', {}, 'Also want it as a skill or plugin? (optional)'), skillTools()),
+    wNav({})
+  );
 }
 
 function wFinish() {
@@ -387,6 +425,153 @@ function wFinish() {
   );
 }
 
+// ── sync timeline ───────────────────────────────────────────────────────────
+// Live counters: elements carry data-since / data-ago / data-until (ISO times) and a 1 s ticker
+// updates their text, so elapsed time moves without re-rendering the page.
+function fmtSpan(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s} s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min`;
+  const hh = Math.floor(m / 60);
+  const mm = m % 60;
+  return mm ? `${hh} h ${mm} min` : `${hh} h`;
+}
+function fmtMinutes(min) {
+  return min == null ? null : fmtSpan(min * 60_000);
+}
+const fmtClock = (iso) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '');
+function fmtBytes(b) {
+  if (b == null) return null;
+  if (b < 1048576) return `${Math.max(1, Math.round(b / 1024))} KB`;
+  if (b < 1073741824) return `${(b / 1048576).toFixed(b < 104857600 ? 1 : 0)} MB`;
+  return `${(b / 1073741824).toFixed(2)} GB`;
+}
+function updateLive(el, now = Date.now()) {
+  const since = el.getAttribute('data-since');
+  const ago = el.getAttribute('data-ago');
+  const until = el.getAttribute('data-until');
+  let t = '';
+  if (since) t = fmtSpan(now - Date.parse(since));
+  else if (ago) t = `${fmtSpan(now - Date.parse(ago))} ago`;
+  else if (until) {
+    const left = Date.parse(until) - now;
+    t = left > 1500 ? `in ${fmtSpan(left)}` : 'now';
+  }
+  el.textContent = `${el.getAttribute('data-prefix') || ''}${t}${el.getAttribute('data-suffix') || ''}`;
+}
+// Filled in right away (not on the first tick), so there's never an empty gap.
+const live = (attr, iso, prefix = '', suffix = '') => {
+  const el = h('span', { [attr]: iso, 'data-prefix': prefix, 'data-suffix': suffix });
+  if (iso) updateLive(el);
+  return el;
+};
+function tickLive() {
+  const now = Date.now();
+  document.querySelectorAll('[data-since],[data-ago],[data-until]').forEach((el) => updateLive(el, now));
+}
+setInterval(tickLive, 1000);
+
+function progressBar(fraction) {
+  const bar = h('div', { class: 'progress' }, h('div', {}));
+  bar.firstChild.style.width = `${Math.max(2, Math.round((fraction || 0) * 100))}%`;
+  return bar;
+}
+
+function renderSyncTimeline(sync, running) {
+  if (!sync.phase || sync.phase === 'idle') return null;
+  const tl = sync.timeline || {};
+  const est = sync.estimate || {};
+  const failed = ['failed', 'cancelled', 'rejected'].includes(sync.phase);
+  const done = sync.phase === 'done';
+
+  // Which step is in progress (or where it stopped).
+  let cur;
+  if (done) cur = 6;
+  else if (sync.phase === 'requesting') cur = 0;
+  else if (sync.phase === 'waiting') cur = tl.jobId ? 2 : 1;
+  else if (sync.phase === 'downloading') cur = 3;
+  else if (sync.phase === 'building') cur = 4;
+  else cur = !tl.requestedAt ? 0 : !tl.jobId ? 1 : !tl.preparedAt ? 2 : !tl.downloadedAt ? 3 : 4;
+
+  const jobState = String(sync.job?.status || '').toLowerCase();
+  const autodeskSince = tl.confirmedAt || tl.requestedAt;
+  const elapsedPrep = autodeskSince ? Date.now() - Date.parse(autodeskSince) : 0;
+  const slow = est.prepareMinutes && elapsedPrep > est.prepareMinutes * 60_000 * 1.5;
+
+  const prepCurrent = h(
+    'div',
+    {},
+    h('div', {}, jobState === 'queued' || jobState === 'pending' ? 'Waiting in Autodesk’s queue. ' : 'Autodesk is extracting your hub’s data. ', live('data-since', autodeskSince, '', ' so far.')),
+    h(
+      'div',
+      {},
+      est.prepareMinutes
+        ? `Your last ${est.basedOn > 1 ? `${est.basedOn} syncs` : 'sync'} took about ${fmtMinutes(est.prepareMinutes)} at this step.`
+        : 'This usually takes from a few minutes to a couple of hours, depending on hub size and how busy Data Connector is.',
+      slow ? ' It’s taking longer than usual; Autodesk’s queue may be busy.' : ''
+    ),
+    sync.lastCheckAt ? h('div', { class: 'small' }, 'Last checked ', live('data-ago', sync.lastCheckAt), sync.nextCheckAt ? h('span', {}, ' · next check ', live('data-until', sync.nextCheckAt)) : null) : null
+  );
+
+  const dl = sync.download;
+  const dlCurrent = h(
+    'div',
+    {},
+    progressBar(sync.progress),
+    h('div', {}, dl?.total ? `${fmtBytes(dl.done)} of ${fmtBytes(dl.total)}` : sync.message || 'Starting the download…', dl?.bytesPerSec ? ` · ${fmtBytes(dl.bytesPerSec)}/s` : '', dl?.secondsLeft != null ? ` · about ${fmtSpan(dl.secondsLeft * 1000)} left` : '')
+  );
+  const buildCurrent = h('div', {}, progressBar(sync.progress), h('div', { text: sync.message || 'Starting…' }));
+  const sizeKnown = tl.downloadBytes ? fmtBytes(tl.downloadBytes) : null;
+
+  const steps = [
+    { title: 'Extraction requested', time: tl.requestedAt, doneText: 'Sent to Autodesk Data Connector.', currentText: 'Sending the request to Autodesk…' },
+    { title: 'Confirmed by Autodesk', time: tl.confirmedAt, doneText: tl.jobId ? `Accepted as job ${String(tl.jobId).slice(0, 8)}.` : 'Accepted.', currentText: 'Waiting for Autodesk to accept the request (usually under a minute).' },
+    { title: 'Autodesk prepares your extract', time: tl.preparedAt, doneText: tl.preparedAt && autodeskSince ? `Ready after ${fmtSpan(Date.parse(tl.preparedAt) - Date.parse(autodeskSince))}.` : 'Ready.', current: prepCurrent, pendingText: est.prepareMinutes ? `Usually about ${fmtMinutes(est.prepareMinutes)}.` : 'Can take a while; it runs on Autodesk’s servers.' },
+    { title: 'Download', time: tl.downloadedAt, doneText: sizeKnown ? `${sizeKnown} downloaded.` : 'Downloaded.', current: dlCurrent, pendingText: est.sizeBytes ? `About ${fmtBytes(est.sizeBytes)} last time.` : null },
+    { title: 'Build the database', time: done ? sync.lastResult?.finishedAt : null, doneText: sync.lastResult?.rows ? `${Number(sync.lastResult.rows).toLocaleString()} rows in ${sync.lastResult.tables} tables.` : 'Built.', current: buildCurrent, pendingText: 'Usually about a minute.' },
+    { title: 'Ready for Claude', time: done ? sync.lastResult?.finishedAt : null, doneText: sync.lastResult?.asOf ? `Claude now sees data as of ${new Date(`${sync.lastResult.asOf}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'long' })}.` : 'Done.', pendingText: 'Claude keeps using the current data until then.' },
+  ];
+
+  const list = h(
+    'ol',
+    { class: 'timeline' },
+    steps.map((st, i) => {
+      const state = i < cur ? 'done' : i === cur && !done ? (failed ? 'failed' : 'current') : 'pending';
+      const detail =
+        state === 'done' ? st.doneText : state === 'current' ? st.current || st.currentText : state === 'failed' ? (sync.phase === 'cancelled' ? 'Cancelled.' : sync.message) : st.pendingText;
+      return h(
+        'li',
+        { class: `tl-step ${state}` },
+        h('span', { class: 'tl-dot', 'aria-hidden': 'true' }, state === 'done' ? '✓' : state === 'failed' ? '✕' : ''),
+        h('span', { class: 'tl-title' }, st.title),
+        h('span', { class: 'tl-time' }, state === 'done' && st.time ? fmtClock(st.time) : ''),
+        detail ? h('div', { class: 'tl-detail' }, detail) : null
+      );
+    })
+  );
+
+  const title = running ? 'Syncing your hub' : done ? 'Last sync finished' : sync.phase === 'cancelled' ? 'Sync cancelled' : sync.phase === 'rejected' ? 'New extract needs your review' : 'Last sync failed';
+  const sub = running
+    ? h('span', {}, `Started ${fmtClock(sync.startedAt)} · `, live('data-since', sync.startedAt, '', ' so far'), sync.resumed ? ' · resumed after a restart' : '')
+    : done && sync.lastResult
+      ? `Finished ${fmtClock(sync.lastResult.finishedAt)} · took ${fmtMinutes(sync.lastResult.minutes)}`
+      : sync.startedAt
+        ? `Started ${fmtClock(sync.startedAt)}`
+        : '';
+
+  return h(
+    'div',
+    { class: 'card' },
+    h('div', { class: 'row' }, h('h2', {}, title), h('span', { class: 'spacer' }), h('span', { class: 'muted small' }, sub)),
+    running && ['requesting', 'waiting'].includes(sync.phase)
+      ? banner('info', 'This part runs on Autodesk’s servers and can take a while. You can close this window: Forma Data Manager keeps checking from the tray and lets you know when the new data is ready.')
+      : null,
+    list,
+    sync.warning ? banner('warn', sync.warning) : null
+  );
+}
+
 // ── status ──────────────────────────────────────────────────────────────────
 function renderStatus() {
   const db = S.database;
@@ -409,20 +594,7 @@ function renderStatus() {
     db?.warnings?.length ? banner('warn', db.warnings.join(' ')) : null
   );
 
-  const phaseNames = { requesting: 'Requesting extract', waiting: 'Waiting for Autodesk', downloading: 'Downloading', building: 'Building database', done: 'Last sync finished', failed: 'Last sync failed', cancelled: 'Sync cancelled', rejected: 'Extract needs your review' };
-  const indeterminate = running && (sync.progress == null || ['requesting', 'waiting'].includes(sync.phase));
-  const syncCard =
-    sync.phase && sync.phase !== 'idle'
-      ? h(
-          'div',
-          { class: 'card' },
-          h('h2', {}, phaseNames[sync.phase] || sync.phase, running && sync.resumed ? h('span', { class: 'muted small' }, ' (resumed)') : null),
-          running ? h('div', { class: `progress ${indeterminate ? 'indeterminate' : ''}` }, h('div', {})) : null,
-          h('div', { class: sync.phase === 'failed' ? 'banner bad' : 'muted', text: sync.message || '' }),
-          sync.warning ? banner('warn', sync.warning) : null
-        )
-      : null;
-  if (syncCard && running && !indeterminate) syncCard.querySelector('.progress > div').style.width = `${Math.round((sync.progress || 0) * 100)}%`;
+  const syncCard = renderSyncTimeline(sync, running);
 
   const rejected = S.pendingRejected
     ? banner('warn', h('b', {}, 'The new extract looks incomplete. '), S.pendingRejected, h('div', { class: 'row' }, btn('Use it anyway', () => call(fdm.useRejected)), btn('Discard', () => call(fdm.discardRejected))))
@@ -453,7 +625,7 @@ function renderHistory() {
       'div',
       { class: 'card' },
       S.history.length
-        ? h('table', {}, h('tr', {}, ['Started', 'Trigger', 'Result', 'Data as of', 'Rows', 'Minutes', 'Notes'].map((t) => h('th', {}, t))), S.history.map((r) => h('tr', {}, h('td', { class: 'nowrap', text: fmtDate(r.startedAt) }), h('td', { text: r.trigger }), h('td', {}, badge(r.status, kinds[r.status] || 'info')), h('td', { class: 'nowrap', text: r.asOf || '—' }), h('td', { text: fmtNum(r.rows) }), h('td', { text: r.minutes ?? '—' }), h('td', { class: 'small', text: r.error || [...(r.warnings || []), r.viewsFailed?.length ? `Views unavailable: ${r.viewsFailed.join(', ')}` : ''].filter(Boolean).join(' ') || '' }))))
+        ? h('table', {}, h('tr', {}, ['Started', 'Trigger', 'Result', 'Data as of', 'Rows', 'Duration', 'Notes'].map((t) => h('th', {}, t))), S.history.map((r) => h('tr', {}, h('td', { class: 'nowrap', text: fmtDate(r.startedAt) }), h('td', { text: r.trigger }), h('td', {}, badge(r.status, kinds[r.status] || 'info')), h('td', { class: 'nowrap', text: r.asOf || '—' }), h('td', { text: fmtNum(r.rows) }), h('td', {}, r.minutes != null ? fmtMinutes(r.minutes) : '—', r.prepareMinutes != null ? h('div', { class: 'small muted', text: `Autodesk ${fmtMinutes(r.prepareMinutes)}${r.sizeBytes ? ` · ${fmtBytes(r.sizeBytes)}` : ''}` }) : null), h('td', { class: 'small', text: r.error || [...(r.warnings || []), r.viewsFailed?.length ? `Views unavailable: ${r.viewsFailed.join(', ')}` : ''].filter(Boolean).join(' ') || '' }))))
         : h('p', { class: 'muted' }, 'No syncs yet.')
     ),
     h('div', { class: 'row' }, btn('Open log folder', () => fdm.openPath('logs')))
@@ -463,20 +635,20 @@ function renderHistory() {
 // ── claude ──────────────────────────────────────────────────────────────────
 function renderClaude() {
   const out = h('div', {});
-  const legacy = h('input', { type: 'checkbox', checked: true });
   return h(
     'div',
     {},
     h('h1', {}, 'Claude setup'),
-    h('p', { class: 'lead' }, 'Register the forma-data MCP server with Claude, and install the dashboard skill.'),
-    h('div', { class: 'card' }, h('h2', {}, 'Claude Desktop'), claudeStatusList(), h('label', { class: 'check' }, legacy, h('span', {}, 'Remove the old "acc-data" entry if it exists')), h('div', { class: 'row' }, btn('Set up / update Claude Desktop', async () => out.replaceChildren(await doInstallClaude(legacy.checked)), 'primary'), btn('Remove from Claude Desktop', async () => {
+    h('p', { class: 'lead' }, 'Register the forma-data MCP server with Claude. The dashboard guide comes built in.'),
+    h('div', { class: 'card' }, h('h2', {}, 'Claude Desktop'), claudeStatusList(), h('div', { class: 'row' }, btn('Set up / update Claude Desktop', async () => out.replaceChildren(await doInstallClaude()), 'primary'), btn('Remove from Claude Desktop', async () => {
       await call(fdm.uninstallClaude);
       toast('Removed. Restart Claude Desktop.');
       refresh();
     }, 'danger')), out, h('p', { class: 'muted small' }, 'After any change, fully quit Claude Desktop (tray icon → Quit) and open it again.')),
     h('div', { class: 'card' }, h('h2', {}, 'Claude Code'), h('p', { class: 'muted small' }, 'Run once in a terminal to add the server for all your projects:'), S.claudeCodeCommand ? copybox(S.claudeCodeCommand) : h('p', { class: 'muted' }, 'Engine not found.')),
-    h('h2', {}, 'Dashboard skill'),
-    skillTools()
+    h('h2', {}, 'Dashboards'),
+    guideBuiltIn(),
+    h('details', { class: 'card' }, h('summary', {}, 'Also want it as a skill or plugin? (optional)'), skillTools())
   );
 }
 

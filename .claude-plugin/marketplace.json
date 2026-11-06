@@ -1,0 +1,14 @@
+{
+  "name": "forma-data",
+  "description": "Forma Data for Claude: the dashboard skill for the forma-data MCP server. Unofficial community project, not affiliated with Autodesk.",
+  "owner": {
+    "name": "Fernando Lima"
+  },
+  "plugins": [
+    {
+      "name": "forma-data",
+      "source": "./claude-plugin",
+      "description": "Dashboard house style and data rules for Autodesk Forma data served by the forma-data MCP server (install Forma Data Manager first)."
+    }
+  ]
+}

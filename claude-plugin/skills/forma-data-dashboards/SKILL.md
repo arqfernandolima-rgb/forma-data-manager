@@ -7,6 +7,8 @@ description: Build fast, accurate dashboards and answers from the Forma Data MCP
 
 Turn questions about the user's Autodesk Forma (formerly Autodesk Construction Cloud) data into a single inline dashboard: key numbers on top, details underneath, drill-downs where they help. The data comes from the local `forma-data` MCP server, which serves a read-only SQLite snapshot built from a Data Connector extract.
 
+This same guide is built into the forma-data server as the `forma_dashboard_guide` tool. If you already have it from either place, don't load it again.
+
 Speed matters. The user wants the dashboard, not a questionnaire. Pick sensible defaults, say which ones you picked in one line, and build. Only ask when the request is truly ambiguous (for example "my project" and several projects match).
 
 ## Freshness

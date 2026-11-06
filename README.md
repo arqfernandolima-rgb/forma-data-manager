@@ -25,7 +25,7 @@ A Windows app pulls your hub's data from Data Connector every day, builds a fast
 
 1. **Pulls data from Autodesk.** You sign in once with your Autodesk account. Every day at a time you choose, or when you click **Sync now**, the app asks the Data Connector API for a fresh extract of the whole hub, waits for it, and downloads it. No manual ZIP files.
 2. **Builds a database you can trust.** The engine turns the extract into a SQLite database using Autodesk's own published schema. It adds cleaned-up views (`v_rfis`, `v_change_order_chains`, …) and a precomputed per-project rollup, checks the result, and only then swaps it in. A bad extract never replaces good data.
-3. **Connects Claude.** The installer's setup wizard registers the `forma-data` MCP server with Claude Desktop and can install a dashboard skill. Claude can then answer questions and build dashboards in seconds.
+3. **Connects Claude.** The installer's setup wizard registers the `forma-data` MCP server with Claude Desktop. The dashboard guide (house style plus data rules) is built into the server, so there's nothing else to install. Claude can then answer questions and build dashboards in seconds.
 
 ## Why answers are accurate
 
@@ -52,10 +52,10 @@ Details: [docs/data-model.md](docs/data-model.md).
 
 1. Download `Forma-Data-Manager-Setup-<version>.exe` from [Releases](../../releases). The installer isn't code-signed, so SmartScreen may warn you: choose **More info → Run anyway**. Compare the file against `SHA256SUMS.txt` if you like.
 2. Accept the license and disclaimer, then install. No admin rights needed.
-3. The setup wizard opens: disclaimer → APS client ID → **Sign in with Autodesk** → pick your hub → data folder → daily schedule → **Set up Claude Desktop** → dashboard skill → first sync.
+3. The setup wizard opens: disclaimer → APS client ID → **Sign in with Autodesk** → pick your hub → data folder → daily schedule → **Set up Claude Desktop** → first sync.
 4. Fully quit and reopen Claude Desktop. Ask something like *"Using forma-data, which active projects have the most overdue RFIs?"*
 
-More detail: [docs/install.md](docs/install.md). Upgrading from the old `acc-data` server: see [docs/install.md#upgrading-from-v3](docs/install.md#upgrading-from-v3).
+More detail: [docs/install.md](docs/install.md).
 
 ## What you can ask
 
@@ -76,8 +76,11 @@ More detail: [docs/install.md](docs/install.md). Upgrading from the old `acc-dat
 | `forma_describe` | Columns, Autodesk's descriptions and real values (e.g. every status) before filtering |
 | `forma_catalog` | Where data lives; search table/column names and descriptions |
 | `forma_search` | Full-text search across issues, RFIs, submittals, meetings, forms, cost and more |
+| `forma_dashboard_guide` | The dashboard house style and data rules; Claude loads it on its own before building a dashboard |
 
 Plus the `forma_dashboard` prompt. Reference: [docs/mcp-tools.md](docs/mcp-tools.md).
+
+Prefer it as a skill? The repository is also a **Claude plugin marketplace**: in Claude, go to **Customize → Plugins → Add → Add marketplace → Add from a repository**, enter `arqfernandolima-rgb/acc-data-mcp-server`, and install **forma-data**. In Claude Code: `/plugin install forma-data --marketplace arqfernandolima-rgb/acc-data-mcp-server`. It's optional, and it stays updated from this repo. See [docs/claude-setup.md](docs/claude-setup.md#the-dashboard-guide).
 
 ## Privacy and security
 
@@ -102,7 +105,7 @@ More: [SECURITY.md](SECURITY.md).
 |---|---|
 | [Install and upgrade](docs/install.md) | [APS app setup](docs/aps-app-setup.md) |
 | [How syncing works](docs/sync.md) | [Data model and accuracy rules](docs/data-model.md) |
-| [MCP tools reference](docs/mcp-tools.md) | [Claude Desktop, Claude Code and the skill](docs/claude-setup.md) |
+| [MCP tools reference](docs/mcp-tools.md) | [Claude Desktop, Claude Code and the dashboard guide](docs/claude-setup.md) |
 | [Architecture](docs/architecture.md) | [Troubleshooting](docs/troubleshooting.md) |
 | [Development and releases](docs/development.md) | [Changelog](CHANGELOG.md) |
 

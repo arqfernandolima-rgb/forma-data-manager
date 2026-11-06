@@ -72,8 +72,15 @@ function makeContext() {
   const dc = new DataConnector({ aps, fetch: fetchImpl, log });
   const where = { isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, appRoot: ROOT };
   const engine = new Engine(engineCommand(where), log);
-  const notify = (title, body) => {
-    if (Notification.isSupported()) new Notification({ title, body, silent: false }).show();
+  // Scheduled syncs always notify. Manual ones only when you're not looking at the window,
+  // since an extract can take an hour and you were told you could walk away.
+  const notify = (title, body, { trigger } = {}) => {
+    const watching = win && !win.isDestroyed() && win.isVisible() && win.isFocused();
+    if (trigger === 'manual' && watching) return;
+    if (!Notification.isSupported()) return;
+    const n = new Notification({ title, body, silent: false });
+    n.on('click', showWindow);
+    n.show();
   };
   const sync = new SyncManager({ store, auth, dc, engine, log, notify });
   const scheduler = new Scheduler({ store, sync, auth, log });
@@ -340,9 +347,9 @@ function registerIpc() {
     return r;
   });
 
-  handle('claude:install', (opts) => {
+  handle('claude:install', () => {
     const s = ctx.store.settings();
-    const res = claudeConfig.install(ctx.engine.exePath, s.dataDir || defaultDataDir(), { removeLegacy: opts?.removeLegacy !== false });
+    const res = claudeConfig.install(ctx.engine.exePath, s.dataDir || defaultDataDir());
     ctx.log.info(`Claude Desktop config updated: ${JSON.stringify(res.map((r) => ({ file: r.file, ok: r.ok })))}`);
     pushState();
     return res;

@@ -14,7 +14,6 @@ const path = require('node:path');
 const os = require('node:os');
 
 const SERVER_KEY = 'forma-data';
-const LEGACY_KEYS = ['acc-data'];
 
 function candidateConfigPaths(env = process.env) {
   const out = [];
@@ -56,10 +55,9 @@ function inspect(exePath, dataDir) {
     try {
       const { config } = readConfig(c.file);
       const entry = config?.mcpServers?.[SERVER_KEY];
-      const legacy = LEGACY_KEYS.filter((k) => config?.mcpServers?.[k]);
       const want = serverEntry(exePath, dataDir);
       const current = entry && entry.command === want.command && entry.env?.FORMA_DATA_DIR === want.env.FORMA_DATA_DIR;
-      return { ...c, state: entry ? (current ? 'configured' : 'outdated') : 'missing', legacy };
+      return { ...c, state: entry ? (current ? 'configured' : 'outdated') : 'missing' };
     } catch (e) {
       return { ...c, state: 'invalid-json', error: e.message };
     }
@@ -68,9 +66,9 @@ function inspect(exePath, dataDir) {
 
 /**
  * Add/refresh our entry in every Claude Desktop config found.
- * @returns {Array<{file, kind, ok, backup?, error?, removedLegacy?}>}
+ * @returns {Array<{file, kind, ok, backup?, error?}>}
  */
-function install(exePath, dataDir, { removeLegacy = true } = {}) {
+function install(exePath, dataDir) {
   if (!exePath) throw new Error('Engine executable not found. Reinstall Forma Data Manager.');
   const results = [];
   const targets = candidateConfigPaths().filter((c) => c.exists);
@@ -87,19 +85,10 @@ function install(exePath, dataDir, { removeLegacy = true } = {}) {
       }
       config.mcpServers = config.mcpServers && typeof config.mcpServers === 'object' ? config.mcpServers : {};
       config.mcpServers[SERVER_KEY] = serverEntry(exePath, dataDir);
-      const removedLegacy = [];
-      if (removeLegacy) {
-        for (const k of LEGACY_KEYS) {
-          if (config.mcpServers[k]) {
-            delete config.mcpServers[k];
-            removedLegacy.push(k);
-          }
-        }
-      }
       const tmp = `${t.file}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(config, null, 2) + '\n');
       fs.renameSync(tmp, t.file);
-      results.push({ file: t.file, kind: t.kind, ok: true, backup, removedLegacy });
+      results.push({ file: t.file, kind: t.kind, ok: true, backup });
     } catch (e) {
       results.push({ file: t.file, kind: t.kind, ok: false, error: e instanceof SyntaxError ? `Existing file is not valid JSON, left untouched: ${e.message}` : e.message });
     }

@@ -123,6 +123,7 @@ export function registerTools(server, store) {
               'Change-order exposure: use v_change_order_chains (one row per real change), never SUM over v_change_orders.',
               'forecast_variance < 0 is a projected overrun. Sum budget lines with has_children = 0.',
               'Label projects with is_production = 0 or looks_like_test = 1 as demo/template/training; do not drop them silently.',
+              'Building a dashboard, chart or visual summary? Call forma_dashboard_guide once first.',
             ],
             warnings: JSON.parse(m.warnings || '[]'),
           };

@@ -67,9 +67,13 @@ Per column: kind, **Autodesk's description** (from the official schema), filled 
 
 Covers issues, issue/RFI comments, RFIs, submittals, meetings, topics, action items, checklists and items, daily-log notes, forms, assets, change orders, contracts, budgets, schedule activities, photos, companies and projects. Active records only. Returns table, id, project, title, status and a highlighted excerpt.
 
+## `forma_dashboard_guide`
+
+No arguments. Returns the dashboard house style and data rules as plain text (~10K characters). This is the [dashboard skill](../claude-plugin/skills/forma-data-dashboards/SKILL.md), built into the server: the tool description and the server instructions tell Claude to call it once before building any dashboard, chart or visual summary. Nothing has to be installed, and it works in every MCP client. If the skill is also installed, Claude skips the tool.
+
 ## Prompt: `forma_dashboard`
 
-Argument `request` (optional). Returns the dashboard house style and data rules (the same content as the [skill](../skill/forma-data-dashboards/SKILL.md)) plus your request. In Claude Desktop, use the **+** menu → forma-data → forma_dashboard.
+Argument `request` (optional). Returns the same guide plus your request. In Claude Desktop, use the **+** menu → forma-data → forma_dashboard.
 
 ## Running it by hand
 

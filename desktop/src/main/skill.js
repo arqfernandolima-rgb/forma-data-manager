@@ -1,8 +1,10 @@
 'use strict';
 /**
- * The bundled "forma-data-dashboards" skill.
- *  - Claude Desktop / claude.ai: skills are uploaded by the user (Settings → Capabilities → Skills → Upload),
- *    so we write a ready-to-upload ZIP and open the folder. There is no supported way to install it silently.
+ * The bundled "forma-data-dashboards" skill (optional: the same guide is built into the MCP server
+ * as the forma_dashboard_guide tool, so nothing has to be installed for dashboards to work).
+ *  - Claude Desktop / claude.ai: skills are uploaded by the user (Customize → Skills → + → Create skill → Upload a skill),
+ *    so we write a ready-to-upload ZIP and open the folder. Claude has no supported way for another app to install one.
+ *    The repo is also a Claude plugin marketplace (Customize → Plugins → Add marketplace), which keeps the skill updated.
  *  - Claude Code: skills are folders under ~/.claude/skills, so we can copy it there directly.
  * The same guidance is also served by the MCP server as the "forma_dashboard" prompt.
  */
@@ -14,7 +16,7 @@ const zlib = require('node:zlib');
 const SKILL_NAME = 'forma-data-dashboards';
 
 function skillSourceDir({ isPackaged, resourcesPath, appRoot }) {
-  return isPackaged ? path.join(resourcesPath, 'skill', SKILL_NAME) : path.join(appRoot, '..', 'skill', SKILL_NAME);
+  return isPackaged ? path.join(resourcesPath, 'skill', SKILL_NAME) : path.join(appRoot, '..', 'claude-plugin', 'skills', SKILL_NAME);
 }
 
 function readSkill(dir) {
