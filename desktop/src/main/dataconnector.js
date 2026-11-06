@@ -19,6 +19,14 @@ const { pipeline } = require('node:stream/promises');
 
 const base = (accountId) => `/data-connector/v1/accounts/${encodeURIComponent(accountId)}`;
 
+/**
+ * Data Connector rejects some characters in descriptions with "400 Invalid characters"
+ * (parentheses, for one). Keep letters, digits, spaces and - _ . : only.
+ */
+function safeDescription(text) {
+  return String(text || '').replace(/[^A-Za-z0-9 _.:-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100) || 'Forma Data Manager';
+}
+
 class DataConnector {
   constructor({ aps, fetch, log }) {
     this.aps = aps;
@@ -29,7 +37,7 @@ class DataConnector {
   /** One-time extraction of every service group, starting now. */
   createOneTimeRequest(accountId, description) {
     return this.aps.post(`${base(accountId)}/requests`, {
-      description,
+      description: safeDescription(description),
       isActive: true,
       scheduleInterval: 'ONE_TIME',
       // A moment in the past so the job starts right away.
@@ -44,7 +52,7 @@ class DataConnector {
    */
   createDailyRequest(accountId, { description, effectiveFrom, effectiveTo }) {
     return this.aps.post(`${base(accountId)}/requests`, {
-      description,
+      description: safeDescription(description),
       isActive: true,
       scheduleInterval: 'DAY',
       reoccuringInterval: 1,
@@ -157,4 +165,4 @@ function jobOutcome(job) {
   return 'running';
 }
 
-module.exports = { DataConnector, jobOutcome };
+module.exports = { DataConnector, jobOutcome, safeDescription };

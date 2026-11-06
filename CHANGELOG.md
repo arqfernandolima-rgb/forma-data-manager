@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.1.1 (2026-11)
+
+### Forma Data Manager (Windows app)
+- Fixed: setting up Autodesk's daily extraction failed with "Autodesk API error 400: Invalid characters". Data Connector rejects parentheses in request descriptions; descriptions now use plain characters only, and if Autodesk still refuses, the app retries once with the simplest description. The log now includes Autodesk's full error for refused requests.
+
 ## 4.1.0 (2026-11)
 
 ### Forma Data Manager (Windows app)

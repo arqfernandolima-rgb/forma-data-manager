@@ -26,7 +26,8 @@ const FALLBACK_LIFETIME_DAYS = 90; // if Autodesk refuses an end date a year out
 const RENEW_WITHIN_DAYS = 30;
 const QUIET_TOO_LONG_MS = 36 * 3_600_000; // a daily request should have queued a job by then
 const MISSED_DAYS_PAUSED = 2; // Autodesk's run didn't show up this many days in a row
-const DESCRIPTION = 'Forma Data Manager daily extraction (managed by the app)';
+// Plain characters only: Data Connector answers "400 Invalid characters" to parentheses.
+const DESCRIPTION = 'Forma Data Manager daily extraction - managed by the app';
 
 const utcClock = (d) => d.toISOString().slice(11, 16);
 
@@ -138,7 +139,8 @@ class CloudSchedule {
       this.save({ checkedAt: iso(), nextExecAt: req.nextExecAt ?? cur.nextExecAt ?? null, effectiveTo, lastError: null });
       return this.status();
     } catch (e) {
-      this.log.warn(`Autodesk daily extraction (${reason}): ${e.message}`);
+      const detail = e.status === 400 && e.detail ? ` ${JSON.stringify(e.detail).slice(0, 400)}` : '';
+      this.log.warn(`Autodesk daily extraction (${reason}): ${e.message}${detail}`);
       this.save({ checkedAt: iso(), lastError: e.message });
       return this.status();
     }
@@ -160,7 +162,9 @@ class CloudSchedule {
       req = await this.dc.createDailyRequest(s.hub.accountId, body);
     } catch (e) {
       if (e.status !== 400) throw e;
-      // Possibly an end date too far out: try a shorter one (it's extended automatically later).
+      this.log.warn(`Data Connector refused the daily request: ${e.message}${e.detail ? ` ${JSON.stringify(e.detail).slice(0, 400)}` : ''}. Trying a simpler one.`);
+      // Simplest description, and an end date closer in (it's extended automatically later).
+      body.description = 'Forma Data Manager daily';
       body.effectiveTo = new Date(start.getTime() + FALLBACK_LIFETIME_DAYS * DAY).toISOString();
       req = await this.dc.createDailyRequest(s.hub.accountId, body);
     }

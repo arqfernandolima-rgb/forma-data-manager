@@ -292,7 +292,7 @@ function scheduleSource() {
   if (!S.settings.schedule.enabled) return null;
   if (c.mode === 'local') return h('p', { class: 'muted small' }, 'Started from this computer.');
   if (c.active) return h('p', { class: 'muted small' }, 'Prepared by Autodesk on its servers', c.nextExecAt && Date.parse(c.nextExecAt) > Date.now() ? ` · next run ${fmtDate(c.nextExecAt)}` : '', '.');
-  if (c.lastError) return h('p', { class: 'small' }, badge('Autodesk schedule unavailable', 'warn'), ' ', h('span', { class: 'muted', text: `${c.lastError} Syncing from this computer meanwhile; the app retries every hour.` }));
+  if (c.lastError) return h('p', { class: 'small' }, badge('Autodesk schedule unavailable', 'warn'), ' ', h('span', { class: 'muted', text: `${c.lastError.replace(/[.\s]*$/, '')}. Syncing from this computer meanwhile; the app retries every hour.` }));
   return h('p', { class: 'muted small' }, 'Setting up Autodesk’s daily extraction…');
 }
 

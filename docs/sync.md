@@ -17,7 +17,7 @@ Settings → Sync (also in the setup wizard) has two choices:
 
 ### How the app looks after Autodesk's schedule
 
-The app creates **one** daily request in your hub's Data Connector, named *Forma Data Manager daily extraction (managed by the app)*, with `scheduleInterval: DAY`, a one-year end date and Autodesk's per-job emails turned off. Autodesk pauses daily schedules whose data isn't downloaded for 14 days and stops them at their end date, so the app keeps it working on its own:
+The app creates **one** daily request in your hub's Data Connector, named *Forma Data Manager daily extraction - managed by the app*, with `scheduleInterval: DAY`, a one-year end date and Autodesk's per-job emails turned off. Autodesk pauses daily schedules whose data isn't downloaded for 14 days and stops them at their end date, so the app keeps it working on its own:
 
 - It downloads every day, which is what keeps Autodesk from pausing it.
 - If Autodesk paused it anyway (for example after two weeks away), the app turns it back on. If it's still not producing runs two days later, the app deletes it and creates a new one.

@@ -466,6 +466,34 @@ test('Autodesk schedule: after a real daylight-saving change it still runs at 06
   assert.equal(from.getMinutes(), 0);
 });
 
+test('Data Connector descriptions: only characters it accepts (it answers 400 "Invalid characters" to parentheses)', async () => {
+  const { safeDescription } = require('../src/main/dataconnector');
+  assert.equal(safeDescription('Forma Data Manager daily extraction (managed by the app)'), 'Forma Data Manager daily extraction managed by the app');
+  assert.equal(safeDescription('Forma Data Manager manual 2026-11-06 01:13Z'), 'Forma Data Manager manual 2026-11-06 01:13Z');
+  // Through the real client: what goes over the wire for a daily request.
+  const sent = [];
+  const fetch = async (url, opts) => (sent.push(JSON.parse(opts.body)), json(200, { id: 'D1' }));
+  const dc = new DataConnector({ aps: new ApsClient({ auth: { accessToken: async () => 'AT', refresh: async () => {} }, fetch, log: quietLog }), fetch, log: quietLog });
+  await dc.createDailyRequest('acc-1', { description: require('../src/main/cloud-schedule').DESCRIPTION, effectiveFrom: 'a', effectiveTo: 'b' });
+  assert.match(sent[0].description, /^[A-Za-z0-9 _.:-]+$/);
+  assert.equal(sent[0].scheduleInterval, 'DAY');
+  assert.equal(sent[0].sendEmail, false);
+});
+
+test('Autodesk schedule: a refused request is retried once with the simplest description', async () => {
+  const { dc, calls, cloud, store } = cloudSetup({ now: Date.now() });
+  const real = dc.createDailyRequest;
+  let n = 0;
+  dc.createDailyRequest = async (acc, body) => {
+    if (n++ === 0) throw Object.assign(new Error('Autodesk API error 400: Invalid characters'), { status: 400, detail: { detail: 'Invalid characters' } });
+    return real(acc, body);
+  };
+  const st = await cloud.ensure('test');
+  assert.equal(st.active, true);
+  assert.equal(calls.find((c) => c[0] === 'create')[2].description, 'Forma Data Manager daily');
+  assert.equal(store.settings().cloudSchedule.lastError, null);
+});
+
 test('Autodesk schedule: errors are kept for the UI, never thrown', async () => {
   const { dc, cloud, store } = cloudSetup({ now: Date.now() });
   dc.createDailyRequest = async () => {
