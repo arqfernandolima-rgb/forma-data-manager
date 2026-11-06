@@ -17,6 +17,7 @@ import { loadCsv } from './load.js';
 import { safeIdentifier } from './normalize.js';
 import { makeContext } from './views.js';
 import { buildIndexes, buildViews, buildFts, buildProjectRollup, buildSummaries, buildViewStats } from './derived.js';
+import { computeChanges } from './changes.js';
 import { readPointer, writePointer, listDatabases, utcStamp, DB_PREFIX } from '../paths.js';
 import { ENGINE_VERSION, SCHEMA_VERSION } from '../version.js';
 
@@ -104,6 +105,17 @@ export async function buildDatabase({ zipPath, csvDir, dataDir, keep = 2, force 
     const anomalyCount = tables.reduce((s, t) => s + Object.values(t.anomalies).reduce((a, b) => a + b.count, 0), 0);
     const parseErrors = tables.reduce((s, t) => s + t.parseErrors, 0);
 
+    // What changed since the extraction this one replaces. Never fails the build.
+    let changes = null;
+    if (prev?.db) {
+      onEvent({ event: 'phase', name: 'changes' });
+      try {
+        changes = computeChanges(db, path.join(dataDir, prev.db), { totalRows });
+      } catch (e) {
+        onEvent({ event: 'note', message: `Could not compare with the previous extract: ${e.message}` });
+      }
+    }
+
     onEvent({ event: 'phase', name: 'finalize' });
     db.exec('DROP TABLE IF EXISTS _meta');
     db.exec('CREATE TABLE _meta (key TEXT PRIMARY KEY, value TEXT)');
@@ -127,6 +139,7 @@ export async function buildDatabase({ zipPath, csvDir, dataDir, keep = 2, force 
       value_anomalies: String(anomalyCount),
       parse_errors: String(parseErrors),
       warnings: JSON.stringify(warnings),
+      changes: changes ? JSON.stringify(changes) : null,
       build_complete: '1',
     };
     const insM = db.query('INSERT INTO _meta VALUES (?, ?)');
@@ -154,6 +167,7 @@ export async function buildDatabase({ zipPath, csvDir, dataDir, keep = 2, force 
       engine_version: ENGINE_VERSION,
       schema_version: SCHEMA_VERSION,
       warnings,
+      changes,
     };
     writePointer(dataDir, pointer);
     const removed = cleanupOldDatabases(dataDir, keep);
@@ -173,6 +187,7 @@ export async function buildDatabase({ zipPath, csvDir, dataDir, keep = 2, force 
       size_mb: Math.round(sizeBytes / 1048576),
       seconds: Math.round((Date.now() - t0) / 100) / 10,
       removed_old: removed,
+      changes,
       table_counts: Object.fromEntries(tables.map((t) => [t.table, t.rows])),
     };
     onEvent(result);

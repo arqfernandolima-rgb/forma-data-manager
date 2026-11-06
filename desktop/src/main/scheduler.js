@@ -3,10 +3,9 @@
  * Daily schedule, run by the app itself (it starts at Windows login and lives in the tray).
  *  - Checks every minute, and right after start-up or waking from sleep.
  *  - If the scheduled time today has passed and today's run hasn't happened, it runs now (catch-up).
- *  - Skips the scheduled run if a successful sync finished in the last 12 hours (e.g. you clicked Sync now).
+ *  - Always runs, even if you clicked Sync now earlier: scheduled and manual syncs are independent.
  *  - Keeps the Autodesk sign-in alive even when the schedule is off (refresh tokens expire after ~15 idle days).
  */
-const SKIP_IF_SYNCED_WITHIN_MS = 12 * 60 * 60_000;
 const KEEPALIVE_MS = 7 * 24 * 60 * 60_000;
 
 function localDate(d) {
@@ -67,17 +66,13 @@ class Scheduler {
     const now = this.now();
     const today = localDate(now);
     if (s.lastScheduledRunDate === today) return 'already-ran';
-    if (now < scheduledAt(now, s.schedule.time)) return 'not-yet';
-
-    const lastSuccess = this.store.history().find((h) => h.status === 'success');
-    if (lastSuccess && now - Date.parse(lastSuccess.finishedAt) < SKIP_IF_SYNCED_WITHIN_MS) {
-      this.store.updateSettings({ lastScheduledRunDate: today });
-      this.log.info('Scheduled sync skipped: data was synced less than 12 hours ago.');
-      return 'recent';
-    }
+    const due = scheduledAt(now, s.schedule.time);
+    if (now < due) return 'not-yet';
     if (!this.auth.signedIn) return 'signed-out';
     this.store.updateSettings({ lastScheduledRunDate: today });
-    this.log.info('Starting scheduled sync');
+    // More than a few minutes late usually means the PC was asleep or off at the set time.
+    const late = now - due > 5 * 60_000;
+    this.log.info(late ? `Starting scheduled sync (catching up: it was due at ${s.schedule.time})` : 'Starting scheduled sync');
     this.sync.start('scheduled').catch((e) => this.log.error(`Scheduled sync could not start: ${e.message}`));
     return 'started';
   }

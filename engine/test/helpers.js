@@ -13,9 +13,10 @@ const csvCell = (v) => {
 };
 
 /** Writes a tiny Data Connector-shaped extract (CSVs + schemas/schema.json) into dir. */
-export function writeMiniExtract(dir, { omitRfiDeletedAt = true } = {}) {
+export function writeMiniExtract(dir, { omitRfiDeletedAt = true, nextDay = false } = {}) {
   const P1 = '11111111-1111-1111-1111-111111111111';
   const P2 = '22222222-2222-2222-2222-222222222222';
+  const P3 = '33333333-3333-3333-3333-333333333333';
   const tables = {
     metadata: {
       cols: { created_at: 'timestamp: SQL', region: 'string', request_start_date: 'timestamp: SQL', request_end_date: 'timestamp: SQL' },
@@ -85,6 +86,15 @@ export function writeMiniExtract(dir, { omitRfiDeletedAt = true } = {}) {
     forms_forms: { cols: { id: 'string: UUID', bim360_project_id: 'string: UUID', status: 'string' }, rows: [] },
   };
 
+  if (nextDay) {
+    // The same hub a day later: one issue closed, one new issue, a new project, one project archived.
+    tables.metadata.rows[0][0] = '2026-06-09 16:26:57';
+    tables.issues_issues.rows[0][5] = 'closed';
+    tables.issues_issues.rows.push(['I5', P1, '5', 'Cracked tile', '', 'open', 'T1', 'U2', '2026-07-01 00:00:00', '2026-06-08 09:00:00', '', 'true']);
+    tables.admin_projects.rows[1][2] = 'archived';
+    tables.admin_projects.rows.push([P3, 'New Clinic', 'active', 'Hospital', 'production', '00200', '', 't', '0']);
+  }
+
   const schema = {};
   for (const [name, t] of Object.entries(tables)) {
     const [service, ...rest] = name.split('_');
@@ -98,5 +108,5 @@ export function writeMiniExtract(dir, { omitRfiDeletedAt = true } = {}) {
   }
   fs.mkdirSync(path.join(dir, 'schemas'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'schemas', 'schema.json'), JSON.stringify(schema));
-  return { P1, P2 };
+  return { P1, P2, P3 };
 }

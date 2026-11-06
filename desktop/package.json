@@ -1,7 +1,7 @@
 {
   "name": "forma-data-manager",
   "productName": "Forma Data Manager",
-  "version": "4.0.2",
+  "version": "4.0.3",
   "description": "Pulls Autodesk Forma Data Connector extracts on a schedule and serves them to Claude. Unofficial test code, provided as is.",
   "license": "MIT",
   "author": "Fernando Lima (community project, not affiliated with Autodesk)",

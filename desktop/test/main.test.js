@@ -12,6 +12,7 @@ const { DataConnector, jobOutcome } = require('../src/main/dataconnector');
 const { SyncManager } = require('../src/main/sync');
 const { Scheduler } = require('../src/main/scheduler');
 const { trayState, TRAY_STATES } = require('../src/main/tray-state');
+const { changeLines, changeHeading, changeHeadline } = require('../src/renderer/changes');
 const { JsonStore } = require('../src/main/store');
 const claudeConfig = require('../src/main/claude-config');
 const skill = require('../src/main/skill');
@@ -141,8 +142,9 @@ function makeSync({ dcFetch, engineResult, engineError, dataDir = tmp('fdm-data-
     },
   };
   const notes = [];
-  const sync = new SyncManager({ store, auth, dc, engine, log: quietLog, notify: (t, b) => notes.push(t), sleep: async () => {} });
-  return { sync, store, builds, dataDir, notes };
+  const bodies = [];
+  const sync = new SyncManager({ store, auth, dc, engine, log: quietLog, notify: (t, b) => (notes.push(t), bodies.push(b)), sleep: async () => {} });
+  return { sync, store, builds, dataDir, notes, bodies };
 }
 
 test('sync: request → wait for job → download ZIP → build → history; download removed; own request cleaned up later', async () => {
@@ -275,7 +277,47 @@ test('tray state: priority and colors for each situation', () => {
   }
 });
 
-test('scheduler: runs once a day after the set time, catches up, skips after a recent sync', () => {
+// Same shape the engine returns (engine/src/build/changes.js).
+const SAMPLE_CHANGES = {
+  previous: { as_of: '2026-11-06', built_at: '2026-11-06T01:20:14.761Z', extraction_created_at: '2026-11-06 01:14:47' },
+  rows: { before: 3539992, after: 3540048 },
+  projects: { before: 2494, after: 2496, added: 2, added_names: ['Clinic A', 'Clinic B'], removed: 0, removed_names: [], status_changed: 1, status_examples: [{ name: 'Old Tower', from: 'active', to: 'archived' }] },
+  items: [
+    { key: 'issues', label: 'Issues', before: 6558, after: 6572, new: 14, closed: 3, open_before: 900, open_after: 911 },
+    { key: 'rfis', label: 'RFIs', before: 1671, after: 1671, new: 0, closed: 0, open_before: 200, open_after: 200 },
+    { key: 'submittals', label: 'Submittals', before: 14481, after: 14486, new: 5, closed: 0, open_before: 3000, open_after: 3005 },
+  ],
+  modules: [
+    { module: 'markups', label: 'Markups', before: 975100, after: 975140 },
+    { module: 'issues', label: 'Issues (ACC)', before: 6558, after: 6572 },
+    { module: 'photos', label: 'Photos', before: 37716, after: 37704 },
+  ],
+};
+
+test('change summary: short lines, most important first; nothing to compare → nothing shown', () => {
+  assert.deepEqual(changeLines(SAMPLE_CHANGES), [
+    'Projects: 2 new (Clinic A, Clinic B) · 1 status change (Old Tower: active → archived)',
+    'Issues: 14 new, 3 closed · Submittals: 5 new',
+    'Also changed: Markups +40, Photos −12',
+  ]);
+  assert.deepEqual(changeLines(null), [], 'first sync ever: no card');
+  assert.deepEqual(changeLines({ ...SAMPLE_CHANGES, projects: { ...SAMPLE_CHANGES.projects, added: 0, status_changed: 0 }, items: [], modules: [] }), ['No changes in projects or tracked items.']);
+  const many = { ...SAMPLE_CHANGES.projects, added: 7, added_names: ['A', 'B', 'C', 'D', 'E'] };
+  assert.match(changeLines({ projects: many })[0], /7 new \(A, B, C \+4 more\)/);
+  assert.match(changeHeading(SAMPLE_CHANGES), /^Compared with the extract of .+ · \+56 rows$/);
+  assert.equal(changeHeadline(SAMPLE_CHANGES), 'Issues: 14 new, 3 closed · Submittals: 5 new');
+});
+
+test('sync: keeps the change summary in history and mentions it in the notification', async () => {
+  const { fetch } = fakeDcFetch();
+  const ctx = makeSync({ dcFetch: fetch, engineResult: { event: 'done', as_of: '2026-11-07', rows: 3540048, tables: 246, views_failed: [], warnings: [], size_mb: 1760, changes: SAMPLE_CHANGES } });
+  const entry = await ctx.sync.start('scheduled');
+  assert.deepEqual(entry.changes, SAMPLE_CHANGES);
+  assert.deepEqual(ctx.store.history()[0].changes, SAMPLE_CHANGES);
+  assert.match(ctx.bodies.at(-1), /Issues: 14 new, 3 closed/);
+});
+
+test('scheduler: runs once a day after the set time, catches up, and runs even after a manual sync', () => {
   const store = new JsonStore(tmp());
   store.updateSettings({ wizardComplete: true, schedule: { enabled: true, time: '06:00' } });
   let started = 0;
@@ -288,10 +330,10 @@ test('scheduler: runs once a day after the set time, catches up, skips after a r
   assert.equal(sch.check(), 'started');
   assert.equal(sch.check(), 'already-ran');
   assert.equal(started, 1);
-  store.addHistory({ status: 'success', finishedAt: new Date(2026, 10, 6, 4, 0).toISOString() });
-  now = new Date(2026, 10, 6, 6, 1);
-  assert.equal(sch.check(), 'recent');
-  assert.equal(started, 1);
+  store.addHistory({ status: 'success', trigger: 'manual', finishedAt: new Date(2026, 10, 6, 4, 0).toISOString() });
+  now = new Date(2026, 10, 6, 6, 1); // a manual sync 2 hours ago doesn't cancel the scheduled one
+  assert.equal(sch.check(), 'started');
+  assert.equal(started, 2);
   assert.equal(sch.nextRun().getDate(), 7);
 });
 

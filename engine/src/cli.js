@@ -91,7 +91,34 @@ async function main() {
         process.exitCode = 1;
         return;
       }
-      writePointer(dataDir, { ...pointer, db: prev, rolled_back_at: new Date().toISOString(), rolled_back_from: pointer?.db });
+      // Describe the database that is now live (not the one we rolled back from).
+      const { Database } = await import('bun:sqlite');
+      const fs = await import('node:fs');
+      const old = new Database(path.join(dataDir, prev), { readonly: true });
+      const meta = Object.fromEntries(old.query('SELECT key, value FROM _meta').all().map((r) => [r.key, r.value]));
+      old.close();
+      const json = (v, fallback) => {
+        try {
+          return v ? JSON.parse(v) : fallback;
+        } catch {
+          return fallback;
+        }
+      };
+      writePointer(dataDir, {
+        db: prev,
+        as_of: meta.as_of,
+        built_at: meta.built_at,
+        extraction_created_at: meta.extraction_created_at ?? null,
+        total_rows: Number(meta.total_rows) || 0,
+        table_count: Number(meta.table_count) || 0,
+        size_bytes: fs.statSync(path.join(dataDir, prev)).size,
+        engine_version: meta.engine_version,
+        schema_version: Number(meta.schema_version),
+        warnings: json(meta.warnings, []),
+        changes: json(meta.changes, null),
+        rolled_back_at: new Date().toISOString(),
+        rolled_back_from: pointer?.db,
+      });
       process.stdout.write(JSON.stringify({ ok: true, now_live: prev }) + '\n');
       return;
     }

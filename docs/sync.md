@@ -31,7 +31,7 @@ The in-flight state is saved after every step (`%APPDATA%\Forma Data Manager\syn
 
 - The app checks every minute, and right after start-up or waking from sleep.
 - If today's scheduled time has passed and today's run hasn't happened yet, it runs now (catch-up).
-- It's skipped if a sync succeeded in the previous 12 hours (for example, you clicked Sync now that morning).
+- It runs every day even if you also clicked **Sync now**; manual syncs don't replace the scheduled one.
 - The schedule needs the app to be running. By default it starts with Windows and stays in the tray. Closing the window keeps it running; use the tray menu → Quit to stop it.
 - While the app runs, the Autodesk sign-in is refreshed regularly, even with the schedule off, so it doesn't expire after ~15 idle days.
 
@@ -54,9 +54,21 @@ A new database only replaces the current one if:
 
 If check 4 fails, the extract is kept and the app asks: **Use it anyway** or **Discard**. A Data Connector job can occasionally finish with partial data, and this stops that from quietly replacing a good database.
 
+## What changed
+
+Each build compares the new extract with the one it replaces and keeps a short summary:
+
+- **Projects**: new ones, ones that disappeared, and status changes (for example active → archived), with a few names.
+- **Issues, RFIs, submittals, forms and checklists**: how many are new and how many were closed since the previous extract. Items are matched by ID, so an item edited twice still counts once.
+- **Everything else**: modules whose main table grew or shrank (markups, photos, daily logs, …).
+
+It shows on the **Status** page (What changed), next to each run on the **History** page, and in the "Forma data updated" notification. Claude sees the same summary in `forma_overview` (`changes_since_previous`), so you can ask "what changed since yesterday?".
+
+The first sync has nothing to compare with, so it has no summary. The comparison never stops a build: if it can't run (for example, the previous database was deleted), that sync just has no summary.
+
 ## Versions and rollback
 
-Each build writes a new file `forma-<UTC timestamp>.db` and then updates `current.json`. Nothing is overwritten in place, which matters on Windows, where open files can't be replaced. The last **2** versions are kept by default (Settings → Database versions to keep). **Settings → Roll back to previous version** switches back instantly.
+Each build writes a new file `forma-<UTC timestamp>.db` and then updates `current.json`. Nothing is overwritten in place, which matters on Windows, where open files can't be replaced. The last **2** versions are kept by default (Settings → Database versions to keep). **Settings → Roll back to previous version** switches back instantly. The Status page then shows that version's date, size and change summary.
 
 Older versions are deleted after a successful build. A file that a running server still has open is skipped and removed after the next build.
 
@@ -66,5 +78,5 @@ Each sync creates one one-time request in your hub's Data Connector. After a suc
 
 ## Logs and history
 
-- **History** page: the last 50 runs with result, data date, rows and duration.
+- **History** page: the last 50 runs with result, data date, rows, duration and what changed.
 - Log file: `%APPDATA%\Forma Data Manager\logs\forma-data-manager.log`. Tokens and signed-URL credentials are redacted.

@@ -8,7 +8,7 @@ The server also sends **instructions** to the client at connect time: the fast p
 
 ## `forma_overview`
 
-Call once per conversation. Returns `as_of`, `data_age_days`, `freshness` (`current` / `N days old` / `STALE: …`), project counts by status and classification, modules with data, the available views with descriptions and row counts, what `project_rollup` contains, and the conventions to follow. About 9K characters.
+Call once per conversation. Returns `as_of`, `data_age_days`, `freshness` (`current` / `N days old` / `STALE: …`), `changes_since_previous` (new/closed issues, RFIs, submittals, forms and checklists, project additions and status changes, and modules that grew or shrank, compared with the previous extract), project counts by status and classification, modules with data, the available views with descriptions and row counts, what `project_rollup` contains, and the conventions to follow. About 9K characters.
 
 ## `forma_find_projects`
 

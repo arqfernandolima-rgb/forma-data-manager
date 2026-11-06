@@ -10,6 +10,7 @@ const { EventEmitter } = require('node:events');
 const fs = require('node:fs');
 const path = require('node:path');
 const { jobOutcome } = require('./dataconnector');
+const { changeHeadline } = require('../renderer/changes');
 
 const DAY = 24 * 60 * 60_000;
 const JOB_LIMIT = 24; // Data Connector: per hub and per user, rolling 24h
@@ -278,13 +279,15 @@ class SyncManager extends EventEmitter {
       warnings: result?.warnings,
       anomalies: result?.value_anomalies,
       sizeMb: result?.size_mb,
+      changes: result?.changes ?? null, // compared with the extraction this one replaced
     };
     this.store.addHistory(entry);
     this.store.setSyncState(null);
     this.removeDownload(state);
     this.setStatus({ phase: 'done', message: `Data as of ${result?.as_of}, ${Number(result?.rows || 0).toLocaleString()} rows.`, progress: 1, timeline: { ...tl, doneAt: entry.finishedAt }, lastResult: entry, download: null, build: null });
     this.log.info(`Sync complete: as_of ${result?.as_of}, ${result?.rows} rows, ${entry.minutes} min (Autodesk ${entry.prepareMinutes} min)`);
-    this.notify('Forma data updated', `Data as of ${result?.as_of}. Took ${fmtDuration(entry.minutes)}.`, { trigger: state.trigger });
+    const headline = changeHeadline(entry.changes);
+    this.notify('Forma data updated', `Data as of ${result?.as_of}. Took ${fmtDuration(entry.minutes)}.${headline ? ` ${headline}` : ''}`, { trigger: state.trigger });
     this.cleanupRequests(state.requestId).catch((e) => this.log.warn(`Request cleanup: ${e.message}`));
     return entry;
   }
@@ -302,8 +305,8 @@ class SyncManager extends EventEmitter {
           if (signal?.aborted) return;
           if (e.event === 'table') this.setStatus({ message: `Loading table ${e.index} of ${e.total}: ${e.table}`, progress: (e.index / e.total) * 0.8, build: { index: e.index, total: e.total } });
           if (e.event === 'phase') {
-            const label = { indexes: 'Creating indexes', views: 'Building views', search: 'Building the search index', summaries: 'Computing summaries', finalize: 'Checking the database' }[e.name] || e.name;
-            this.setStatus({ message: `${label}…`, progress: { indexes: 0.82, views: 0.86, search: 0.9, summaries: 0.94, finalize: 0.98 }[e.name] ?? null });
+            const label = { indexes: 'Creating indexes', views: 'Building views', search: 'Building the search index', summaries: 'Computing summaries', changes: 'Comparing with the previous extract', finalize: 'Checking the database' }[e.name] || e.name;
+            this.setStatus({ message: `${label}…`, progress: { indexes: 0.82, views: 0.86, search: 0.9, summaries: 0.93, changes: 0.96, finalize: 0.98 }[e.name] ?? null });
           }
         },
       });

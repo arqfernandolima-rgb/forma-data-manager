@@ -162,3 +162,55 @@ describe('versioning', () => {
     expect(fs.readdirSync(dataDir).some((f) => f.endsWith('.partial'))).toBe(false);
   });
 });
+
+describe('changes since the previous extract', () => {
+  let dir; // shared: the rollback test below goes back from day 2 to day 1
+  test('first build has nothing to compare; the next one counts new, closed and changed items', async () => {
+    dir = tmpDir('forma-changes-');
+    const day1 = tmpDir('forma-day1-');
+    const day2 = tmpDir('forma-day2-');
+    writeMiniExtract(day1);
+    writeMiniExtract(day2, { nextDay: true });
+
+    const first = await buildDatabase({ csvDir: day1, dataDir: dir });
+    expect(first.changes).toBeNull();
+    await Bun.sleep(1100); // new UTC-second stamp
+    const second = await buildDatabase({ csvDir: day2, dataDir: dir });
+    const c = second.changes;
+
+    expect(c.previous.as_of).toBe('2026-06-08');
+    expect(c.rows).toEqual({ before: first.rows, after: second.rows });
+    expect(c.projects).toEqual({
+      before: 2, after: 3,
+      added: 1, added_names: ['New Clinic'],
+      removed: 0, removed_names: [],
+      status_changed: 1, status_examples: [{ name: 'Training Sandbox', from: 'active', to: 'archived' }],
+    });
+    // v_issues excludes the deleted I3: before I1 open, I2 closed, I4 draft; after I1 closed, I5 new and open.
+    expect(c.items.find((i) => i.key === 'issues')).toEqual({ key: 'issues', label: 'Issues', before: 3, after: 4, new: 1, closed: 1, open_before: 1, open_after: 1 });
+    expect(c.items.find((i) => i.key === 'rfis')).toMatchObject({ before: 2, after: 2, new: 0, closed: 0 });
+    expect(c.modules.map((m) => m.module).sort()).toEqual(['admin', 'issues']);
+
+    // Stored with the database, so Claude and `info` can see it too.
+    const live = new Database(path.join(dir, readPointer(dir).db), { readonly: true });
+    expect(JSON.parse(live.query("SELECT value FROM _meta WHERE key = 'changes'").get().value)).toEqual(c);
+    live.close();
+  });
+
+  test('rollback points at the older database and describes it, not the newer one', () => {
+    const before = readPointer(dir);
+    const run = Bun.spawnSync(['bun', path.join(import.meta.dir, '..', 'src', 'cli.js'), 'rollback', '--data-dir', dir]);
+    expect(run.exitCode).toBe(0);
+    const after = readPointer(dir);
+    expect(after.db).not.toBe(before.db);
+    expect(after.as_of).toBe('2026-06-08');
+    expect(after.total_rows).toBeLessThan(before.total_rows);
+    expect(after.changes).toBeNull();
+    expect(after.rolled_back_from).toBe(before.db);
+  });
+
+  test.skipIf(!fs.existsSync('/proc/self/fd'))('comparing leaves no handle open on the previous database', () => {
+    const open = fs.readdirSync('/proc/self/fd').map((fd) => { try { return fs.readlinkSync(`/proc/self/fd/${fd}`); } catch { return ''; } });
+    expect(open.filter((f) => /forma-changes-.*\.db$/.test(f))).toEqual([]);
+  });
+});

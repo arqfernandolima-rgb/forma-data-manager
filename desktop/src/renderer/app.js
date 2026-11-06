@@ -285,7 +285,7 @@ function wSchedule() {
       'div',
       { class: 'card' },
       h('label', { class: 'check' }, enabled, h('span', {}, 'Sync automatically every day at ', time, ' (local time)')),
-      h('p', { class: 'muted small' }, 'If the computer is off or asleep at that time, the sync runs as soon as the app is running again. It’s skipped if you synced manually in the previous 12 hours.'),
+      h('p', { class: 'muted small' }, 'If the computer is off or asleep at that time, the sync runs as soon as the app is running again. It runs every day, even if you also synced manually.'),
       h('label', { class: 'check' }, login, h('span', {}, 'Start Forma Data Manager when I sign in to Windows (runs quietly in the tray)'))
     ),
     wNav({
@@ -594,6 +594,16 @@ function renderStatus() {
     db?.warnings?.length ? banner('warn', db.warnings.join(' ')) : null
   );
 
+  const changes = db?.changes;
+  const changesCard = changes
+    ? h(
+        'div',
+        { class: 'card' },
+        h('div', { class: 'row' }, h('h2', {}, 'What changed'), h('span', { class: 'spacer' }), h('span', { class: 'muted small', text: FormaChanges.changeHeading(changes) })),
+        h('ul', { class: 'changes' }, FormaChanges.changeLines(changes).map((l) => h('li', { text: l })))
+      )
+    : null;
+
   const syncCard = renderSyncTimeline(sync, running);
 
   const rejected = S.pendingRejected
@@ -610,22 +620,27 @@ function renderStatus() {
     h('div', { class: 'card' }, h('h2', {}, 'Hub'), h('p', { text: S.settings.hub?.name || '—' }), h('p', { class: 'muted small mono', text: S.settings.hub?.accountId || '' }), !S.signedIn ? btn('Sign in', async () => (await call(fdm.signIn), refresh()), 'primary') : null)
   );
 
-  return h('div', {}, h('h1', {}, 'Status'), h('p', { class: 'lead' }, 'Your hub’s data, refreshed from Autodesk Data Connector.'), rejected, hero, syncCard, info);
+  return h('div', {}, h('h1', {}, 'Status'), h('p', { class: 'lead' }, 'Your hub’s data, refreshed from Autodesk Data Connector.'), rejected, hero, changesCard, syncCard, info);
 }
 
 // ── history ─────────────────────────────────────────────────────────────────
 function renderHistory() {
   const kinds = { success: 'ok', failed: 'bad', rejected: 'warn', cancelled: 'info' };
+  const details = (r) => {
+    const problems = r.error || [...(r.warnings || []), r.viewsFailed?.length ? `Views unavailable: ${r.viewsFailed.join(', ')}` : ''].filter(Boolean).join(' ');
+    const changed = r.status === 'success' ? FormaChanges.changeLines(r.changes) : [];
+    return h('td', { class: 'small changes-cell' }, problems ? h('div', { text: problems }) : null, changed.map((l) => h('div', { class: 'muted', text: l })));
+  };
   return h(
     'div',
     {},
     h('h1', {}, 'History'),
-    h('p', { class: 'lead' }, 'The last syncs, newest first. Full details are in the log file.'),
+    h('p', { class: 'lead' }, 'The last syncs, newest first, with what changed compared with the extract before each one. Full details are in the log file.'),
     h(
       'div',
       { class: 'card' },
       S.history.length
-        ? h('table', {}, h('tr', {}, ['Started', 'Trigger', 'Result', 'Data as of', 'Rows', 'Duration', 'Notes'].map((t) => h('th', {}, t))), S.history.map((r) => h('tr', {}, h('td', { class: 'nowrap', text: fmtDate(r.startedAt) }), h('td', { text: r.trigger }), h('td', {}, badge(r.status, kinds[r.status] || 'info')), h('td', { class: 'nowrap', text: r.asOf || '—' }), h('td', { text: fmtNum(r.rows) }), h('td', {}, r.minutes != null ? fmtMinutes(r.minutes) : '—', r.prepareMinutes != null ? h('div', { class: 'small muted', text: `Autodesk ${fmtMinutes(r.prepareMinutes)}${r.sizeBytes ? ` · ${fmtBytes(r.sizeBytes)}` : ''}` }) : null), h('td', { class: 'small', text: r.error || [...(r.warnings || []), r.viewsFailed?.length ? `Views unavailable: ${r.viewsFailed.join(', ')}` : ''].filter(Boolean).join(' ') || '' }))))
+        ? h('table', {}, h('tr', {}, ['Started', 'Trigger', 'Result', 'Data as of', 'Rows', 'Duration', 'What changed'].map((t) => h('th', {}, t))), S.history.map((r) => h('tr', {}, h('td', { class: 'nowrap', text: fmtDate(r.startedAt) }), h('td', { text: r.trigger }), h('td', {}, badge(r.status, kinds[r.status] || 'info')), h('td', { class: 'nowrap', text: r.asOf || '—' }), h('td', { text: fmtNum(r.rows) }), h('td', {}, r.minutes != null ? fmtMinutes(r.minutes) : '—', r.prepareMinutes != null ? h('div', { class: 'small muted', text: `Autodesk ${fmtMinutes(r.prepareMinutes)}${r.sizeBytes ? ` · ${fmtBytes(r.sizeBytes)}` : ''}` }) : null), details(r))))
         : h('p', { class: 'muted' }, 'No syncs yet.')
     ),
     h('div', { class: 'row' }, btn('Open log folder', () => fdm.openPath('logs')))

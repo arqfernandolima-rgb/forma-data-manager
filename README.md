@@ -69,7 +69,7 @@ More detail: [docs/install.md](docs/install.md).
 
 | Tool | Use it for |
 |---|---|
-| `forma_overview` | Data freshness, project counts, modules, views and conventions. Called once per conversation |
+| `forma_overview` | Data freshness, what changed since the previous extract, project counts, modules, views and conventions. Called once per conversation |
 | `forma_find_projects` | Which/how many projects (exact counts, demo/template flags) |
 | `forma_project_summary` | Everything about one project; returns candidates if the name is ambiguous |
 | `forma_sql` | Read-only SQL on the views, `project_rollup` and raw tables |

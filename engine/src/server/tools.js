@@ -70,7 +70,7 @@ export function registerTools(server, store) {
     {
       title: 'Overview and data freshness',
       description:
-        'Start here once per conversation. Returns the data date (as_of), how old it is, project counts by status/classification, which modules have data, the analytical views (with row counts and what they contain), and the conventions to follow. Quote "Data as of <as_of>" in your answer.',
+        'Start here once per conversation. Returns the data date (as_of), how old it is, what changed since the previous extraction, project counts by status/classification, which modules have data, the analytical views (with row counts and what they contain), and the conventions to follow. Quote "Data as of <as_of>" in your answer.',
       inputSchema: {},
       annotations: { readOnlyHint: true, idempotentHint: true },
     },
@@ -103,10 +103,17 @@ export function registerTools(server, store) {
           }
           const views = store.all(`SELECT name, rows, description FROM _views WHERE status = 'ok'`);
           const failed = store.all(`SELECT name, error FROM _views WHERE status != 'ok'`);
+          let changes = null;
+          try {
+            changes = m.changes ? JSON.parse(m.changes) : null;
+            if (changes?.modules) changes.modules = changes.modules.slice(0, 8);
+          } catch {}
           return {
             extraction_created_at: m.extraction_created_at,
             region: m.extraction_region,
             built_at: m.built_at,
+            // Compared with the extraction this one replaced: new/closed items are matched by ID.
+            changes_since_previous: changes ?? undefined,
             projects,
             modules,
             views,

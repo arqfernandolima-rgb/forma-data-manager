@@ -160,3 +160,8 @@ details.card > summary { cursor: pointer; }
 .tl-detail .progress { margin: 6px 0 4px; max-width: 520px; }
 .card > .row > h2 { margin: 0; }
 .card > .banner { margin-top: 12px; margin-bottom: 0; }
+
+/* What changed since the previous extract */
+.changes { margin: 10px 0 0; padding-left: 18px; }
+.changes li { margin: 4px 0; }
+.changes-cell > div + div { margin-top: 5px; }
