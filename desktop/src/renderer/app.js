@@ -158,7 +158,7 @@ function wApp() {
     'div',
     {},
     h('h1', {}, 'Connect your Autodesk app'),
-    h('p', { class: 'lead' }, 'Data Connector only works with a user sign-in through an APS app you control. It takes about five minutes, once. ', link('Step-by-step guide', `${S.repoUrl}/blob/master/docs/aps-app-setup.md`)),
+    h('p', { class: 'lead' }, 'Data Connector only works with a user sign-in through an APS app you control. It takes about five minutes, once. ', link('Step-by-step guide', `${S.repoUrl}/blob/main/docs/aps-app-setup.md`)),
     h('div', { class: 'card' }, apsSteps(), h('label', { class: 'field' }, h('span', {}, 'APS Client ID'), input), h('details', {}, h('summary', { class: 'muted small' }, 'Advanced: callback port'), h('label', { class: 'field' }, h('span', {}, 'Port (the callback URL above changes with it)'), port))),
     wNav({
       next: async () => {
@@ -335,7 +335,7 @@ function wClaude() {
   );
 }
 
-const MARKETPLACE_REPO = 'arqfernandolima-rgb/acc-data-mcp-server';
+const MARKETPLACE_REPO = 'arqfernandolima-rgb/forma-data-manager';
 
 function guideBuiltIn() {
   return banner(
@@ -705,7 +705,7 @@ function renderAbout() {
     h('h1', {}, 'About'),
     h('p', { class: 'lead' }, `Forma Data Manager ${S.version}`),
     h('div', { class: 'card' }, h('h2', {}, 'Disclaimer'), DISCLAIMER.map((p) => h('p', {}, p))),
-    h('div', { class: 'card' }, h('h2', {}, 'Links'), h('div', { class: 'row' }, link('Source code and documentation', S.repoUrl), link('Report an issue', `${S.repoUrl}/issues`), link('License (MIT)', `${S.repoUrl}/blob/master/LICENSE`))),
+    h('div', { class: 'card' }, h('h2', {}, 'Links'), h('div', { class: 'row' }, link('Source code and documentation', S.repoUrl), link('Report an issue', `${S.repoUrl}/issues`), link('License (MIT)', `${S.repoUrl}/blob/main/LICENSE`))),
     h('div', { class: 'card' }, h('h2', {}, 'Files'), h('p', { class: 'small' }, 'Log: ', h('span', { class: 'mono', text: S.logFile })), h('p', { class: 'small' }, 'Engine: ', h('span', { class: 'mono', text: S.engineExe || 'development mode' })), h('div', { class: 'row' }, btn('Open log folder', () => fdm.openPath('logs')), btn('Open data folder', () => fdm.openPath('data'))))
   );
 }

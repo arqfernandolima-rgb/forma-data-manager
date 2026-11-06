@@ -80,7 +80,7 @@ More detail: [docs/install.md](docs/install.md).
 
 Plus the `forma_dashboard` prompt. Reference: [docs/mcp-tools.md](docs/mcp-tools.md).
 
-Prefer it as a skill? The repository is also a **Claude plugin marketplace**: in Claude, go to **Customize → Plugins → Add → Add marketplace → Add from a repository**, enter `arqfernandolima-rgb/acc-data-mcp-server`, and install **forma-data**. In Claude Code: `/plugin install forma-data --marketplace arqfernandolima-rgb/acc-data-mcp-server`. It's optional, and it stays updated from this repo. See [docs/claude-setup.md](docs/claude-setup.md#the-dashboard-guide).
+Prefer it as a skill? The repository is also a **Claude plugin marketplace**: in Claude, go to **Customize → Plugins → Add → Add marketplace → Add from a repository**, enter `arqfernandolima-rgb/forma-data-manager`, and install **forma-data**. In Claude Code: `/plugin install forma-data --marketplace arqfernandolima-rgb/forma-data-manager`. It's optional, and it stays updated from this repo. See [docs/claude-setup.md](docs/claude-setup.md#the-dashboard-guide).
 
 ## Privacy and security
 

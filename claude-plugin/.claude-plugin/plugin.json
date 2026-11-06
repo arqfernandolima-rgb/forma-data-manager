@@ -5,8 +5,8 @@
   "author": {
     "name": "Fernando Lima"
   },
-  "homepage": "https://github.com/arqfernandolima-rgb/acc-data-mcp-server",
-  "repository": "https://github.com/arqfernandolima-rgb/acc-data-mcp-server",
+  "homepage": "https://github.com/arqfernandolima-rgb/forma-data-manager",
+  "repository": "https://github.com/arqfernandolima-rgb/forma-data-manager",
   "license": "MIT",
   "keywords": ["autodesk-forma", "acc", "data-connector", "dashboards", "mcp"]
 }

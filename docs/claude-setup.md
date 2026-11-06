@@ -53,9 +53,9 @@ Claude doesn't let other apps add skills or plugins to your account, so these ar
 
 | Option | How |
 |---|---|
-| **Plugin (updates itself)** | In Claude: **Customize → Plugins → Add → Add marketplace → Add from a repository**, enter `arqfernandolima-rgb/acc-data-mcp-server`, then install **forma-data**. New versions arrive when the repo updates. Plugins need a paid Claude plan |
+| **Plugin (updates itself)** | In Claude: **Customize → Plugins → Add → Add marketplace → Add from a repository**, enter `arqfernandolima-rgb/forma-data-manager`, then install **forma-data**. New versions arrive when the repo updates. Plugins need a paid Claude plan |
 | **Uploaded skill (customizable)** | In Forma Data Manager: **Claude setup → Save skill ZIP**. Then in Claude: **Customize → Skills → + → Create skill → Upload a skill** and pick the ZIP. Skills need code execution on (**Settings → Capabilities**) |
-| **Claude Code** | `/plugin install forma-data --marketplace arqfernandolima-rgb/acc-data-mcp-server` (Claude Code 2.1.275 or later), or on older versions `claude plugin marketplace add arqfernandolima-rgb/acc-data-mcp-server` then `claude plugin install forma-data@forma-data`. Or click **Install for Claude Code** in the app to copy the skill to `%USERPROFILE%\.claude\skills` |
+| **Claude Code** | `/plugin install forma-data --marketplace arqfernandolima-rgb/forma-data-manager` (Claude Code 2.1.275 or later), or on older versions `claude plugin marketplace add arqfernandolima-rgb/forma-data-manager` then `claude plugin install forma-data@forma-data`. Or click **Install for Claude Code** in the app to copy the skill to `%USERPROFILE%\.claude\skills` |
 | **Team / Enterprise** | An owner can provision the skill for the whole organization from the ZIP, or add the marketplace for everyone |
 
 When the skill is loaded, Claude skips `forma_dashboard_guide` (it's the same content).

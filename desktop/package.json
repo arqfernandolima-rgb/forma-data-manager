@@ -17,9 +17,9 @@
     "electron": "44.9.0",
     "electron-builder": "26.17.0"
   },
-  "homepage": "https://github.com/arqfernandolima-rgb/acc-data-mcp-server",
+  "homepage": "https://github.com/arqfernandolima-rgb/forma-data-manager",
   "repository": {
     "type": "git",
-    "url": "https://github.com/arqfernandolima-rgb/acc-data-mcp-server.git"
+    "url": "https://github.com/arqfernandolima-rgb/forma-data-manager.git"
   }
 }

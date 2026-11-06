@@ -21,7 +21,7 @@ const skill = require('./skill');
 const { trayState, TRAY_STATES } = require('./tray-state');
 
 const APP_ID = 'io.github.arqfernandolima.formadatamanager';
-const REPO_URL = 'https://github.com/arqfernandolima-rgb/acc-data-mcp-server';
+const REPO_URL = 'https://github.com/arqfernandolima-rgb/forma-data-manager';
 const ROOT = path.join(__dirname, '..', '..'); // desktop/
 const startHidden = process.argv.includes('--hidden');
 const LOGIN_ITEM_NAME = 'FormaDataManager'; // also referenced by build/installer.nsh
