@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 4.0.1 (2026-11)
 
 ### Forma Data Manager (Windows app)
 - Fixed: the tray icon stayed on "syncing" after a sync finished or failed.
