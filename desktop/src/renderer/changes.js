@@ -62,13 +62,57 @@
     return `Compared with the extract of ${when}${rows}`;
   }
 
+  // Items that were in the previous extract but not in this one (deleted, or moved out of view).
+  // after = kept + new and before = kept + removed, so removed = before - after + new.
+  const removedItems = (i) => Math.max(0, (i.before || 0) - (i.after || 0) + (i.new || 0));
+
+  /** One row per category with movement: { label, added, removed, closed, statusChanged }. */
+  function changeTable(c) {
+    if (!c) return [];
+    const rows = [];
+    const p = c.projects;
+    if (p && (p.added || p.removed || p.status_changed)) rows.push({ label: 'Projects', added: p.added || 0, removed: p.removed || 0, closed: 0, statusChanged: p.status_changed || 0 });
+    for (const i of c.items || []) {
+      const removed = removedItems(i);
+      if (i.new || i.closed || removed) rows.push({ label: i.label, added: i.new || 0, removed, closed: i.closed || 0, statusChanged: 0 });
+    }
+    return rows;
+  }
+
+  /** "23 added · 2 removed · 4 closed" (zeros left out). '' when there's nothing to compare. */
+  function changeTotals(c) {
+    if (!c) return '';
+    const rows = changeTable(c);
+    const sum = (k) => rows.reduce((s, r) => s + (r[k] || 0), 0);
+    const parts = [];
+    if (sum('added')) parts.push(`${num(sum('added'))} added`);
+    if (sum('removed')) parts.push(`${num(sum('removed'))} removed`);
+    if (sum('closed')) parts.push(`${num(sum('closed'))} closed`);
+    const st = sum('statusChanged');
+    if (st) parts.push(`${num(st)} status ${st === 1 ? 'change' : 'changes'}`);
+    if (parts.length) return parts.join(' · ');
+    return (c.modules || []).some((m) => !COVERED.has(m.module)) ? 'Only other modules changed' : 'No changes';
+  }
+
+  /** Extra detail lines under the table: which projects, and the other modules. */
+  function changeNotes(c) {
+    if (!c) return [];
+    const p = c.projects || {};
+    return [
+      p.added ? `New projects: ${names(p.added_names, p.added)}` : null,
+      p.removed ? `Removed projects: ${names(p.removed_names, p.removed)}` : null,
+      p.status_changed ? `Status changes: ${(p.status_examples || []).slice(0, 3).map((e) => `${e.name} (${e.from || '—'} → ${e.to || '—'})`).join(', ')}${p.status_changed > 3 ? ` +${num(p.status_changed - 3)} more` : ''}` : null,
+      otherLine(c.modules),
+    ].filter(Boolean);
+  }
+
   /** One short phrase for a notification, or '' when nothing notable changed. */
   function changeHeadline(c) {
     if (!c) return '';
     return itemsLine(c.items) || projectLine(c.projects) || '';
   }
 
-  const api = { changeLines, changeHeading, changeHeadline };
+  const api = { changeLines, changeHeading, changeHeadline, changeTable, changeTotals, changeNotes };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.FormaChanges = api;
 })(typeof window !== 'undefined' ? window : globalThis);

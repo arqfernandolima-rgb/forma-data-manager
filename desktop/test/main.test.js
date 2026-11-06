@@ -12,7 +12,7 @@ const { DataConnector, jobOutcome } = require('../src/main/dataconnector');
 const { SyncManager } = require('../src/main/sync');
 const { Scheduler } = require('../src/main/scheduler');
 const { trayState, TRAY_STATES } = require('../src/main/tray-state');
-const { changeLines, changeHeading, changeHeadline } = require('../src/renderer/changes');
+const { changeLines, changeHeading, changeHeadline, changeTable, changeTotals, changeNotes } = require('../src/renderer/changes');
 const { JsonStore } = require('../src/main/store');
 const claudeConfig = require('../src/main/claude-config');
 const skill = require('../src/main/skill');
@@ -306,6 +306,22 @@ test('change summary: short lines, most important first; nothing to compare → 
   assert.match(changeLines({ projects: many })[0], /7 new \(A, B, C \+4 more\)/);
   assert.match(changeHeading(SAMPLE_CHANGES), /^Compared with the extract of .+ · \+56 rows$/);
   assert.equal(changeHeadline(SAMPLE_CHANGES), 'Issues: 14 new, 3 closed · Submittals: 5 new');
+});
+
+test('history summary: "N added · N removed · N closed" plus a per-category table', () => {
+  assert.equal(changeTotals(SAMPLE_CHANGES), '21 added · 3 closed · 1 status change');
+  assert.deepEqual(changeTable(SAMPLE_CHANGES), [
+    { label: 'Projects', added: 2, removed: 0, closed: 0, statusChanged: 1 },
+    { label: 'Issues', added: 14, removed: 0, closed: 3, statusChanged: 0 },
+    { label: 'Submittals', added: 5, removed: 0, closed: 0, statusChanged: 0 },
+  ]);
+  // 10 issues before, 1 new, 9 now: 2 of the old ones are gone.
+  const gone = { items: [{ key: 'issues', label: 'Issues', before: 10, after: 9, new: 1, closed: 0 }], modules: [] };
+  assert.equal(changeTotals(gone), '1 added · 2 removed');
+  assert.deepEqual(changeNotes(SAMPLE_CHANGES), ['New projects: Clinic A, Clinic B', 'Status changes: Old Tower (active → archived)', 'Also changed: Markups +40, Photos −12']);
+  assert.equal(changeTotals({ items: [], modules: [{ module: 'photos', label: 'Photos', before: 1, after: 2 }] }), 'Only other modules changed');
+  assert.equal(changeTotals({ items: [], modules: [] }), 'No changes');
+  assert.equal(changeTotals(null), '');
 });
 
 test('sync: keeps the change summary in history and mentions it in the notification', async () => {

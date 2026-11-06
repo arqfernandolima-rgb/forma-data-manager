@@ -164,4 +164,16 @@ details.card > summary { cursor: pointer; }
 /* What changed since the previous extract */
 .changes { margin: 10px 0 0; padding-left: 18px; }
 .changes li { margin: 4px 0; }
-.changes-cell > div + div { margin-top: 5px; }
+
+/* History: one-line summary per sync, breakdown when opened */
+.hist-toggle { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.hist-toggle:hover { color: var(--accent); }
+.hist-toggle .chev { display: inline-block; width: 14px; color: var(--muted); }
+table.history > tr.open > td { border-bottom-color: transparent; }
+table.history > tr > td:last-child { min-width: 250px; }
+tr.detail > td { padding: 4px 8px 14px 22px; }
+.change-detail { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+table.mini { width: auto; min-width: 340px; font-size: 12px; margin-bottom: 4px; }
+table.mini th, table.mini td { padding: 4px 18px 4px 0; border-bottom: 1px solid var(--line); }
+table.mini tr:last-child td { border-bottom: 0; }
+table.mini .num { text-align: right; font-variant-numeric: tabular-nums; }

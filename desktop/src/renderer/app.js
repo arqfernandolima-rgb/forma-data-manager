@@ -624,25 +624,60 @@ function renderStatus() {
 }
 
 // ── history ─────────────────────────────────────────────────────────────────
+// Rows the user opened (by start time), kept across background re-renders.
+const openHistory = new Set();
+
+/** Full-width breakdown under a history row: Added / Removed / Closed per category. */
+function changeDetail(c) {
+  const rows = FormaChanges.changeTable(c);
+  const cell = (n) => (n ? fmtNum(n) : '—');
+  return h(
+    'div',
+    { class: 'change-detail' },
+    rows.length
+      ? h('table', { class: 'mini' }, h('tr', {}, ['', 'Added', 'Removed', 'Closed'].map((t) => h('th', { class: t ? 'num' : '' }, t))), rows.map((r) => h('tr', {}, h('td', { text: r.label }), h('td', { class: 'num', text: cell(r.added) }), h('td', { class: 'num', text: cell(r.removed) }), h('td', { class: 'num', text: cell(r.closed) }))))
+      : null,
+    FormaChanges.changeNotes(c).map((l) => h('div', { class: 'small', text: l })),
+    h('div', { class: 'muted small', text: FormaChanges.changeHeading(c) })
+  );
+}
+
 function renderHistory() {
   const kinds = { success: 'ok', failed: 'bad', rejected: 'warn', cancelled: 'info' };
-  const details = (r) => {
+  const cols = ['Started', 'Trigger', 'Result', 'Data as of', 'Rows', 'Duration', 'What changed'];
+  const rowsFor = (r) => {
     const problems = r.error || [...(r.warnings || []), r.viewsFailed?.length ? `Views unavailable: ${r.viewsFailed.join(', ')}` : ''].filter(Boolean).join(' ');
-    const changed = r.status === 'success' ? FormaChanges.changeLines(r.changes) : [];
-    return h('td', { class: 'small changes-cell' }, problems ? h('div', { text: problems }) : null, changed.map((l) => h('div', { class: 'muted', text: l })));
+    const canOpen = r.status === 'success' && !!r.changes;
+    const open = canOpen && openHistory.has(r.startedAt);
+    const toggle = () => {
+      if (open) openHistory.delete(r.startedAt);
+      else openHistory.add(r.startedAt);
+      render();
+    };
+    const summary = canOpen
+      ? h('button', { class: 'hist-toggle', onclick: toggle, 'aria-expanded': String(open), title: open ? 'Hide details' : 'Show details' }, h('span', { class: 'chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'), FormaChanges.changeTotals(r.changes))
+      : r.status === 'success'
+        ? h('span', { class: 'muted' }, '—')
+        : problems;
+    const main = h(
+      'tr',
+      { class: open ? 'open' : '' },
+      h('td', { class: 'nowrap', text: fmtDate(r.startedAt) }),
+      h('td', { text: r.trigger }),
+      h('td', {}, badge(r.status, kinds[r.status] || 'info')),
+      h('td', { class: 'nowrap', text: r.asOf || '—' }),
+      h('td', { text: fmtNum(r.rows) }),
+      h('td', {}, r.minutes != null ? fmtMinutes(r.minutes) : '—', r.prepareMinutes != null ? h('div', { class: 'small muted', text: `Autodesk ${fmtMinutes(r.prepareMinutes)}${r.sizeBytes ? ` · ${fmtBytes(r.sizeBytes)}` : ''}` }) : null),
+      h('td', {}, summary, r.status === 'success' && problems ? h('div', { class: 'small muted', text: problems }) : null)
+    );
+    return open ? [main, h('tr', { class: 'detail' }, h('td', { colspan: cols.length }, changeDetail(r.changes)))] : main;
   };
   return h(
     'div',
     {},
     h('h1', {}, 'History'),
-    h('p', { class: 'lead' }, 'The last syncs, newest first, with what changed compared with the extract before each one. Full details are in the log file.'),
-    h(
-      'div',
-      { class: 'card' },
-      S.history.length
-        ? h('table', {}, h('tr', {}, ['Started', 'Trigger', 'Result', 'Data as of', 'Rows', 'Duration', 'What changed'].map((t) => h('th', {}, t))), S.history.map((r) => h('tr', {}, h('td', { class: 'nowrap', text: fmtDate(r.startedAt) }), h('td', { text: r.trigger }), h('td', {}, badge(r.status, kinds[r.status] || 'info')), h('td', { class: 'nowrap', text: r.asOf || '—' }), h('td', { text: fmtNum(r.rows) }), h('td', {}, r.minutes != null ? fmtMinutes(r.minutes) : '—', r.prepareMinutes != null ? h('div', { class: 'small muted', text: `Autodesk ${fmtMinutes(r.prepareMinutes)}${r.sizeBytes ? ` · ${fmtBytes(r.sizeBytes)}` : ''}` }) : null), details(r))))
-        : h('p', { class: 'muted' }, 'No syncs yet.')
-    ),
+    h('p', { class: 'lead' }, 'The last syncs, newest first. Click a summary to see what changed. Full details are in the log file.'),
+    h('div', { class: 'card' }, S.history.length ? h('table', { class: 'history' }, h('tr', {}, cols.map((t) => h('th', {}, t))), S.history.flatMap(rowsFor)) : h('p', { class: 'muted' }, 'No syncs yet.')),
     h('div', { class: 'row' }, btn('Open log folder', () => fdm.openPath('logs')))
   );
 }

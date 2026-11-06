@@ -3,7 +3,7 @@
 ## 4.0.3 (2026-11)
 
 ### Forma Data Manager (Windows app)
-- **What changed**: each sync now compares the new extract with the previous one and shows a short summary on the Status page, next to each run in History, and in the "Forma data updated" notification: new and closed issues, RFIs, submittals, forms and checklists (matched by ID), new or archived projects, and other modules that grew or shrank.
+- **What changed**: each sync now compares the new extract with the previous one and shows a short summary on the Status page, in History (one line per sync, e.g. "23 added · 2 removed · 4 closed"; click it for a per-category Added/Removed/Closed breakdown), and in the "Forma data updated" notification: new and closed issues, RFIs, submittals, forms and checklists (matched by ID), new or archived projects, and other modules that grew or shrank.
 - The scheduled sync now runs every day, even if you also clicked Sync now. Before, it was skipped when a sync had finished in the previous 12 hours. If the PC is asleep at the scheduled time it still catches up when it wakes, and the log now says so.
 - Fixed: after **Roll back to previous version**, the Status page kept showing the newer version's date, row count and size.
 

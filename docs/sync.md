@@ -62,7 +62,7 @@ Each build compares the new extract with the one it replaces and keeps a short s
 - **Issues, RFIs, submittals, forms and checklists**: how many are new and how many were closed since the previous extract. Items are matched by ID, so an item edited twice still counts once.
 - **Everything else**: modules whose main table grew or shrank (markups, photos, daily logs, …).
 
-It shows on the **Status** page (What changed), next to each run on the **History** page, and in the "Forma data updated" notification. Claude sees the same summary in `forma_overview` (`changes_since_previous`), so you can ask "what changed since yesterday?".
+It shows on the **Status** page (What changed), on the **History** page as one line per sync (for example "23 added · 2 removed · 4 closed"; click it for a breakdown by category, project names and other modules), and in the "Forma data updated" notification. "Removed" means the item was in the previous extract but not in this one, usually because it was deleted. Claude sees the same summary in `forma_overview` (`changes_since_previous`), so you can ask "what changed since yesterday?".
 
 The first sync has nothing to compare with, so it has no summary. The comparison never stops a build: if it can't run (for example, the previous database was deleted), that sync just has no summary.
 
