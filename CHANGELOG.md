@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.1.2 (2026-11)
+
+### Forma Data Manager (Windows app)
+- After an upgrade, a problem with Autodesk's daily schedule left over from the previous version is retried as soon as the app starts, instead of up to an hour later. (After installing 4.1.1, Settings could keep showing the old "Invalid characters" message for a while.)
+- Polish across every screen:
+  - Settings: the "Sync every day at" checkbox lines up with its text and time box. The schedule status line sits under the two choices, which dim while the daily sync is off. Number boxes are narrower.
+  - Claude setup: buttons no longer touch the Claude Desktop table, and the location names are shorter.
+  - History: fewer, tidier columns that fit the window. How the sync was started sits under its date, the row count and download size under the data date, and Autodesk's preparation time under the duration.
+  - Even spacing inside every card, the setup wizard included.
+- Docs: README and sync docs describe the Autodesk-prepared daily extract; troubleshooting covers the old "Invalid characters" message.
+
 ## 4.1.1 (2026-11)
 
 ### Forma Data Manager (Windows app)

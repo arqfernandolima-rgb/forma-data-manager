@@ -28,10 +28,10 @@ The app creates **one** daily request in your hub's Data Connector, named *Forma
 
 Every day after your scheduled time, the app looks for that day's run:
 
-- **Finished or still running**: the app collects it (waits for it if needed), downloads and builds. History shows it as *scheduled (Autodesk)*.
+- **Finished or still running**: the app collects it (waits for it if needed), downloads and builds. History shows it as *scheduled by Autodesk*.
 - **Failed**: the app starts a one-time extraction itself right away.
 - **Not there 45 minutes after the time**: the app starts a one-time extraction itself and remembers the miss; two misses in a row count as "paused" (see above).
-- **Can't be set up** (for example, missing permissions): the Schedule card says so, the app syncs from this computer meanwhile and retries every hour.
+- **Can't be set up** (for example, missing permissions): the Schedule card and Settings say so, the app syncs from this computer meanwhile and retries every hour (and right away when the app starts, so an upgrade that fixes the problem takes effect at once).
 
 ## Phases
 

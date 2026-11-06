@@ -67,6 +67,11 @@ p { margin: 0 0 10px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); }
 .card + .card { margin-top: 16px; }
+/* Even spacing between the blocks inside a card (tables, button rows, notes, copy boxes) */
+.card > * + * { margin-top: 10px; }
+.card > .btn, .card > .badge { margin-top: 0; }
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
 .grid .card + .card { margin-top: 0; }
 .hero { display: flex; gap: 24px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
 .big { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
@@ -96,6 +101,10 @@ input:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--acc
 textarea { width: 100%; min-height: 360px; font-family: 'Cascadia Mono', Consolas, monospace; font-size: 12px; }
 .check { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0; }
 .check input { margin-top: 3px; }
+/* A checkbox whose label holds an input (e.g. the sync time) is centred on that input */
+.check.inline { align-items: center; }
+.check.inline input[type='checkbox'] { margin-top: 0; }
+label.field > input[type='number'] { width: 140px; }
 .mono { font-family: 'Cascadia Mono', Consolas, monospace; font-size: 12px; word-break: break-all; }
 .copybox { display: flex; gap: 8px; align-items: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 6px 6px 10px; max-width: 720px; }
 .copybox .mono { flex: 1; }
@@ -113,7 +122,9 @@ th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacin
 td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 ol.steps { padding-left: 20px; margin: 6px 0 14px; }
 ol.steps li { margin-bottom: 6px; }
-.list-pick { display: flex; flex-direction: column; gap: 6px; max-width: 620px; }
+.list-pick { display: flex; flex-direction: column; gap: 6px; }
+.list-pick + details { margin-top: 12px; }
+details > summary + * { margin-top: 10px; }
 .list-pick label { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; background: var(--panel); }
 .list-pick label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
 /* Wizard */
@@ -170,7 +181,8 @@ details.card > summary { cursor: pointer; }
 .hist-toggle:hover { color: var(--accent); }
 .hist-toggle .chev { display: inline-block; width: 14px; color: var(--muted); }
 table.history > tr.open > td { border-bottom-color: transparent; }
-table.history > tr > td:last-child { min-width: 250px; }
+table.history > tr > td:last-child { min-width: 200px; }
+.table-scroll { overflow-x: auto; }
 tr.detail > td { padding: 4px 8px 14px 22px; }
 .change-detail { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 table.mini { width: auto; min-width: 340px; font-size: 12px; margin-bottom: 4px; }
@@ -182,3 +194,7 @@ table.mini .num { text-align: right; font-variant-numeric: tabular-nums; }
 .mode-choice { margin: 6px 0 4px 26px; display: flex; flex-direction: column; gap: 6px; }
 .mode-choice .check { margin: 0; }
 .mode-choice .check span { font-size: 13px; }
+.mode-choice.off { opacity: 0.5; }
+.sched-note { margin-left: 26px; }
+.sched-note .badge { margin-right: 6px; }
+.banner:last-child { margin-bottom: 0; }

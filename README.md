@@ -19,11 +19,11 @@ A Windows app pulls your hub's data from Data Connector every day, builds a fast
 ┌──────────────────┐  Data Connector  ┌───────────────────────────────────────────────┐  MCP   ┌──────────────┐
 │ projects, issues │  API (daily or   │ Forma Data Manager  ──►  forma-data engine    │ stdio  │ "Which RFIs  │
 │ RFIs, cost, ...  │ ───────────────► │ (sign-in, schedule,      build → SQLite       │ ◄────► │  are overdue │
-└──────────────────┘   Sync now)      │  download)               serve → 7 MCP tools  │        │  on ...?"    │
+└──────────────────┘   Sync now)      │  download)               serve → 8 MCP tools  │        │  on ...?"    │
                                       └───────────────────────────────────────────────┘        └──────────────┘
 ```
 
-1. **Pulls data from Autodesk.** You sign in once with your Autodesk account. Every day at a time you choose, or when you click **Sync now**, the app asks the Data Connector API for a fresh extract of the whole hub, waits for it, and downloads it. No manual ZIP files.
+1. **Pulls data from Autodesk.** You sign in once with your Autodesk account. Every day at a time you choose, Autodesk's Data Connector prepares a fresh extract of the whole hub on its servers (the app sets up and looks after that daily schedule for you), and the app downloads it. **Sync now** starts an extra extraction whenever you want one. No manual ZIP files.
 2. **Builds a database you can trust.** The engine turns the extract into a SQLite database using Autodesk's own published schema. It adds cleaned-up views (`v_rfis`, `v_change_order_chains`, …) and a precomputed per-project rollup, checks the result, and only then swaps it in. A bad extract never replaces good data.
 3. **Connects Claude.** The installer's setup wizard registers the `forma-data` MCP server with Claude Desktop. The dashboard guide (house style plus data rules) is built into the server, so there's nothing else to install. Claude can then answer questions and build dashboards in seconds.
 
@@ -50,9 +50,9 @@ Details: [docs/data-model.md](docs/data-model.md).
 
 ## Install
 
-1. Download `Forma-Data-Manager-Setup-<version>.exe` from [Releases](../../releases). The installer isn't code-signed, so SmartScreen may warn you: choose **More info → Run anyway**. Compare the file against `SHA256SUMS.txt` if you like.
+1. Download `Forma-Data-Manager-Setup-<version>.exe` from the newest release on the [Releases](../../releases) page. The installer isn't code-signed, so SmartScreen may warn you: choose **More info → Run anyway**. Compare the file against `SHA256SUMS.txt` if you like.
 2. Accept the license and disclaimer, then install. No admin rights needed.
-3. The setup wizard opens: disclaimer → APS client ID → **Sign in with Autodesk** → pick your hub → data folder → daily schedule → **Set up Claude Desktop** → first sync.
+3. The setup wizard opens: disclaimer → APS client ID → **Sign in with Autodesk** → pick your hub → data folder → daily schedule (Autodesk prepares it, recommended, or this computer starts it) → **Set up Claude Desktop** → first sync.
 4. Fully quit and reopen Claude Desktop. Ask something like *"Using forma-data, which active projects have the most overdue RFIs?"*
 
 More detail: [docs/install.md](docs/install.md).
@@ -97,7 +97,7 @@ More: [SECURITY.md](SECURITY.md).
 - Data Connector allows **24 extraction jobs per rolling 24 hours** per hub and per user, and jobs started in the Forma web UI count too.
 - Tested with US-region hubs. EMEA/AUS hubs should work but are unverified.
 - Windows only for the app. The engine itself runs anywhere Bun runs.
-- Daily sync runs while the app is running (it starts with Windows and lives in the tray). If the PC is off, it catches up the next time it starts.
+- Autodesk prepares the daily extract even when your PC is asleep or off, but the download and database build happen on your PC: the app starts with Windows, lives in the tray, and catches up as soon as the PC is on. Autodesk keeps each extract for 30 days.
 
 ## Documentation
 

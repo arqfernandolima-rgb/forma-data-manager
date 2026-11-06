@@ -52,6 +52,13 @@ async function call(fn, ...args) {
 }
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+/** Compact date for tables: the year only when it isn't this year. */
+const fmtShort = (iso) => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }), hour: 'numeric', minute: '2-digit' });
+};
 const fmtNum = (n) => (n == null ? '—' : Number(n).toLocaleString());
 function ageDays(asOf) {
   if (!asOf) return null;
@@ -190,7 +197,7 @@ function wSignIn() {
       } finally {
         e.target.disabled = false;
       }
-    }, 'primary big-btn')),
+    }, S.signedIn ? '' : 'primary big-btn')),
     wNav({ nextDisabled: !S.signedIn })
   );
 }
@@ -245,7 +252,7 @@ function wFolder() {
     const r = await call(fdm.checkDataDir, dir);
     info.replaceChildren(
       r.writable ? banner('ok', `Writable${r.freeGb != null ? ` · ${r.freeGb} GB free` : ''}`) : banner('bad', `Can’t write here: ${r.error || 'permission denied'}`),
-      ...r.warnings.map((w) => banner('warn', w))
+      ...(r.warnings || []).map((w) => banner('warn', w))
     );
   };
   check();
@@ -287,13 +294,21 @@ function modeChoice(current) {
 }
 
 /** One line about where today's extraction comes from, for Status and Settings. */
-function scheduleSource() {
+function scheduleSource(extra = '') {
   const c = S.cloud || {};
   if (!S.settings.schedule.enabled) return null;
-  if (c.mode === 'local') return h('p', { class: 'muted small' }, 'Started from this computer.');
-  if (c.active) return h('p', { class: 'muted small' }, 'Prepared by Autodesk on its servers', c.nextExecAt && Date.parse(c.nextExecAt) > Date.now() ? ` · next run ${fmtDate(c.nextExecAt)}` : '', '.');
-  if (c.lastError) return h('p', { class: 'small' }, badge('Autodesk schedule unavailable', 'warn'), ' ', h('span', { class: 'muted', text: `${c.lastError.replace(/[.\s]*$/, '')}. Syncing from this computer meanwhile; the app retries every hour.` }));
-  return h('p', { class: 'muted small' }, 'Setting up Autodesk’s daily extraction…');
+  const cls = (base) => `${base} ${extra}`.trim();
+  if (c.mode === 'local') return h('p', { class: cls('muted small') }, 'Started from this computer.');
+  if (c.active) return h('p', { class: cls('muted small') }, 'Prepared by Autodesk on its servers', c.nextExecAt && Date.parse(c.nextExecAt) > Date.now() ? ` · next run ${fmtDate(c.nextExecAt)}` : '', '.');
+  if (c.lastError) return h('p', { class: cls('small') }, badge('Autodesk schedule unavailable', 'warn'), ' ', h('span', { class: 'muted', text: `${c.lastError.replace(/[.\s]*$/, '')}. Syncing from this computer meanwhile; the app retries every hour.` }));
+  return h('p', { class: cls('muted small') }, 'Setting up Autodesk’s daily extraction…');
+}
+
+/** Dim the "who starts it" choice while the daily sync is switched off. */
+function linkModeToSchedule(enabled, mode) {
+  const sync = () => mode.el.classList.toggle('off', !enabled.checked);
+  enabled.addEventListener('change', sync);
+  sync();
 }
 
 function wSchedule() {
@@ -301,6 +316,7 @@ function wSchedule() {
   const time = h('input', { type: 'time', value: S.settings.schedule.time });
   const login = h('input', { type: 'checkbox', checked: S.settings.startAtLogin });
   const mode = modeChoice(S.settings.extractionMode);
+  linkModeToSchedule(enabled, mode);
   return h(
     'div',
     {},
@@ -309,9 +325,9 @@ function wSchedule() {
     h(
       'div',
       { class: 'card' },
-      h('label', { class: 'check' }, enabled, h('span', {}, 'Sync automatically every day at ', time, ' (local time)')),
+      h('label', { class: 'check inline' }, enabled, h('span', {}, 'Sync automatically every day at ', time, ' (local time)')),
       mode.el,
-      h('p', { class: 'muted small' }, 'It runs every day, even if you also sync manually. Sync now always starts a fresh extraction right away.'),
+      h('p', { class: 'muted small sched-note' }, 'It runs every day, even if you also sync manually. Sync now always starts a fresh extraction right away.'),
       h('label', { class: 'check' }, login, h('span', {}, 'Start Forma Data Manager when I sign in to Windows (runs quietly in the tray)'))
     ),
     wNav({
@@ -325,7 +341,7 @@ function wSchedule() {
 }
 
 function claudeStatusList() {
-  const kinds = { installer: 'Claude Desktop (standard installer)', store: 'Claude Desktop (Microsoft Store / MSIX)', macos: 'Claude Desktop' };
+  const kinds = { installer: 'Standard installer', store: 'Microsoft Store (MSIX)', macos: 'Claude Desktop' };
   const states = { configured: ['Connected', 'ok'], outdated: ['Needs update', 'warn'], missing: ['Not set up', 'info'], 'not-installed': ['Not found', 'info'], 'invalid-json': ['Config file has errors', 'bad'] };
   return h(
     'table',
@@ -431,6 +447,7 @@ function wFinish() {
     'div',
     {},
     h('h1', {}, 'All set'),
+    h('p', { class: 'lead' }, 'Here’s what was set up. You can change any of it later under Settings.'),
     h('div', { class: 'card' }, h('table', {}, [
       ['Hub', S.settings.hub?.name || '—'],
       ['Signed in', S.user?.email || (S.signedIn ? 'yes' : 'no')],
@@ -670,7 +687,7 @@ function changeDetail(c) {
 
 function renderHistory() {
   const kinds = { success: 'ok', failed: 'bad', rejected: 'warn', cancelled: 'info' };
-  const cols = ['Started', 'Trigger', 'Result', 'Data as of', 'Rows', 'Duration', 'What changed'];
+  const cols = ['Started', 'Result', 'Data as of', 'Duration', 'What changed'];
   const rowsFor = (r) => {
     const problems = r.error || [...(r.warnings || []), r.viewsFailed?.length ? `Views unavailable: ${r.viewsFailed.join(', ')}` : ''].filter(Boolean).join(' ');
     const canOpen = r.status === 'success' && !!r.changes;
@@ -688,12 +705,10 @@ function renderHistory() {
     const main = h(
       'tr',
       { class: open ? 'open' : '' },
-      h('td', { class: 'nowrap', text: fmtDate(r.startedAt) }),
-      h('td', { text: r.source === 'autodesk' ? 'scheduled (Autodesk)' : r.trigger }),
+      h('td', { class: 'nowrap', title: fmtDate(r.startedAt) }, fmtShort(r.startedAt), h('div', { class: 'small muted', text: r.source === 'autodesk' ? 'scheduled by Autodesk' : r.trigger || '' })),
       h('td', {}, badge(r.status, kinds[r.status] || 'info')),
-      h('td', { class: 'nowrap', text: r.asOf || '—' }),
-      h('td', { text: fmtNum(r.rows) }),
-      h('td', {}, r.minutes != null ? fmtMinutes(r.minutes) : '—', r.prepareMinutes != null ? h('div', { class: 'small muted', text: `Autodesk ${fmtMinutes(r.prepareMinutes)}${r.sizeBytes ? ` · ${fmtBytes(r.sizeBytes)}` : ''}` }) : null),
+      h('td', { class: 'nowrap' }, r.asOf || '—', r.rows != null ? h('div', { class: 'small muted', text: `${fmtNum(r.rows)} rows${r.sizeBytes ? ` · ${fmtBytes(r.sizeBytes)}` : ''}` }) : null),
+      h('td', {}, r.minutes != null ? fmtMinutes(r.minutes) : '—', r.prepareMinutes != null ? h('div', { class: 'small muted', text: `+ ${fmtMinutes(r.prepareMinutes)} at Autodesk` }) : null),
       h('td', {}, summary, r.status === 'success' && problems ? h('div', { class: 'small muted', text: problems }) : null)
     );
     return open ? [main, h('tr', { class: 'detail' }, h('td', { colspan: cols.length }, changeDetail(r.changes)))] : main;
@@ -703,7 +718,7 @@ function renderHistory() {
     {},
     h('h1', {}, 'History'),
     h('p', { class: 'lead' }, 'The last syncs, newest first. Click a summary to see what changed. Full details are in the log file.'),
-    h('div', { class: 'card' }, S.history.length ? h('table', { class: 'history' }, h('tr', {}, cols.map((t) => h('th', {}, t))), S.history.flatMap(rowsFor)) : h('p', { class: 'muted' }, 'No syncs yet.')),
+    h('div', { class: 'card' }, S.history.length ? h('div', { class: 'table-scroll' }, h('table', { class: 'history' }, h('tr', {}, cols.map((t) => h('th', {}, t))), S.history.flatMap(rowsFor))) : h('p', { class: 'muted' }, 'No syncs yet.')),
     h('div', { class: 'row' }, btn('Open log folder', () => fdm.openPath('logs')))
   );
 }
@@ -739,6 +754,7 @@ function renderSettings() {
   const keep = h('input', { type: 'number', value: s.keepVersions, min: 1, max: 5 });
   const keepDl = h('input', { type: 'checkbox', checked: s.keepDownloads });
   const mode = modeChoice(s.extractionMode);
+  linkModeToSchedule(enabled, mode);
   const save = async () => {
     await call(fdm.updateSettings, { clientId: clientId.value, callbackPort: Number(port.value), schedule: { enabled: enabled.checked, time: time.value || '06:00' }, extractionMode: mode.value(), startAtLogin: login.checked, keepVersions: Number(keep.value), keepDownloads: keepDl.checked });
     toast('Saved');
@@ -748,7 +764,8 @@ function renderSettings() {
     'div',
     {},
     h('h1', {}, 'Settings'),
-    h('div', { class: 'card' }, h('h2', {}, 'Sync'), h('label', { class: 'check' }, enabled, h('span', {}, 'Sync every day at ', time)), mode.el, scheduleSource(), h('label', { class: 'check' }, login, h('span', {}, 'Start with Windows (in the tray)')), h('label', { class: 'field' }, h('span', {}, 'Database versions to keep (for rollback)'), keep), h('label', { class: 'check' }, keepDl, h('span', {}, 'Keep downloaded extract ZIPs (for troubleshooting; they are large)')), btn('Save', save, 'primary')),
+    h('p', { class: 'lead' }, 'Each card has its own Save button where one is needed; other changes apply right away.'),
+    h('div', { class: 'card' }, h('h2', {}, 'Sync'), h('label', { class: 'check inline' }, enabled, h('span', {}, 'Sync every day at ', time, ' (local time)')), mode.el, scheduleSource('sched-note'), h('label', { class: 'check' }, login, h('span', {}, 'Start with Windows (in the tray)')), h('label', { class: 'field' }, h('span', {}, 'Database versions to keep (for rollback)'), keep), h('label', { class: 'check' }, keepDl, h('span', {}, 'Keep downloaded extract ZIPs (for troubleshooting; they are large)')), btn('Save', save, 'primary')),
     h('div', { class: 'card' }, h('h2', {}, 'Autodesk app and sign-in'), h('label', { class: 'field' }, h('span', {}, 'APS Client ID'), clientId), h('label', { class: 'field' }, h('span', {}, 'Callback port'), port), h('p', { class: 'small muted' }, 'Callback URL to register in your APS app:'), copybox(S.redirectUri), h('div', { class: 'row' }, btn('Save', save, 'primary'), S.signedIn ? btn('Sign out', async () => (await call(fdm.signOut), refresh()), 'danger') : btn('Sign in', async () => (await call(fdm.signIn), refresh())))),
     h('div', { class: 'card' }, h('h2', {}, 'Hub'), h('p', { text: S.settings.hub ? `${S.settings.hub.name} (${S.settings.hub.accountId})` : 'None' }), btn('Change hub', () => openWizardAt(3))),
     h('div', { class: 'card' }, h('h2', {}, 'Data folder'), h('p', { class: 'mono', text: s.dataDir || '—' }), h('div', { class: 'row' }, btn('Open', () => fdm.openPath('data')), btn('Change…', async () => {

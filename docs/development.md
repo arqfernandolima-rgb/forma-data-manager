@@ -11,7 +11,7 @@
 ```bash
 cd engine
 bun install
-bun test                                  # 33 tests: normalization, SQL guard, full build on a synthetic extract, view layout checks
+bun test                                  # 36 tests: normalization, SQL guard, full build on a synthetic extract, view layout checks, change summary
 bun src/cli.js build --zip path/to/autodesk_data_extract.zip --data-dir ./data
 bun src/cli.js serve --data-dir ./data    # MCP over stdio
 bun scripts/smoke.js ./data               # starts the server as an MCP client would and calls every tool
@@ -25,7 +25,7 @@ bun run compile:win                       # dist/forma-data.exe (cross-compiles 
 ```bash
 cd desktop
 npm install
-npm test                                  # 15 tests: PKCE sign-in via loopback, retries, sync pipeline incl. timeline/resume/limits/rejection, scheduler, Claude config merge, skill ZIP
+npm test                                  # 33 tests: PKCE sign-in via loopback, retries, sync pipeline incl. timeline/resume/limits/rejection, scheduler, Autodesk daily schedule upkeep, Claude config merge, tray state, skill ZIP
 npm start                                 # dev mode: uses ../engine/dist/forma-data(.exe) if present, else `bun ../engine/src/cli.js`
 npm run dist                              # Windows installer in dist/ (needs ../engine/dist/forma-data.exe)
 ```

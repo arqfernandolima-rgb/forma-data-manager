@@ -584,6 +584,16 @@ test('upgrade from 4.0.x: first check sets up Autodesk’s schedule, no extra sy
   assert.equal(t.started.length + t.collected.length, 0);
 });
 
+test('after an upgrade, a setup error from the old version is retried at start-up, not an hour later', async () => {
+  const now = new Date(2026, 10, 6, 13, 4);
+  const t = schedulerWithCloud({ now });
+  t.store.updateSettings({ lastScheduledRunDate: '2026-11-06', cloudSchedule: { lastError: 'Autodesk API error 400: Invalid characters', checkedAt: new Date(2026, 10, 6, 12, 23).toISOString() } });
+  t.sch.check();
+  await t.cloud.inFlight;
+  assert.ok(t.store.settings().cloudSchedule.requestId, 'created right away');
+  assert.equal(t.store.settings().cloudSchedule.lastError, null);
+});
+
 test('sync: collecting Autodesk’s job skips creating a request and keeps Autodesk’s own timing', async () => {
   const { fetch, seen } = fakeDcFetch({ jobStatuses: ['complete'], completedAt: '2026-11-05T11:06:00Z' });
   const ctx = makeSync({ dcFetch: fetch });

@@ -47,6 +47,7 @@ class Scheduler {
     this.timer = null;
     this.autodeskCheck = null; // in-flight look at Autodesk's jobs
     this.lastAutodeskPoll = 0;
+    this.checkedScheduleSinceStart = false; // first check after start-up (or an upgrade) always runs
   }
 
   start() {
@@ -149,10 +150,14 @@ class Scheduler {
     // Remove one that's no longer wanted (retry every few minutes if offline), re-check a healthy one
     // twice a day, and retry setting one up hourly after an error.
     const due =
+      (!this.checkedScheduleSinceStart && (wanted || cs?.requestId)) ||
       (cs?.requestId && !wanted && since > 5 * 60_000) ||
       (cs?.requestId && wanted && since > RECHECK_SCHEDULE_MS) ||
       (!cs?.requestId && wanted && since > RETRY_SCHEDULE_MS);
-    if (due) this.cloud.ensure('scheduled check');
+    if (due) {
+      this.checkedScheduleSinceStart = true;
+      this.cloud.ensure('scheduled check');
+    }
   }
 
   keepSignInAlive() {
