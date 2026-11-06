@@ -1,8 +1,10 @@
 'use strict';
 /**
  * Data Connector API (APS), v1:
- *   POST   /data-connector/v1/accounts/:accountId/requests                 create a request
- *   GET    /data-connector/v1/accounts/:accountId/requests/:id/jobs        jobs of a request
+ *   POST   /data-connector/v1/accounts/:accountId/requests                 create a request (one-time or daily)
+ *   GET    /data-connector/v1/accounts/:accountId/requests/:id             one request (isActive, effectiveTo, nextExecAt, lastQueuedAt)
+ *   PATCH  /data-connector/v1/accounts/:accountId/requests/:id             turn back on / extend a daily request
+ *   GET    /data-connector/v1/accounts/:accountId/requests/:id/jobs        jobs of a request (newest first)
  *   GET    /data-connector/v1/accounts/:accountId/jobs/:jobId              one job
  *   GET    /data-connector/v1/accounts/:accountId/jobs/:jobId/data-listing files produced by a job
  *   GET    /data-connector/v1/accounts/:accountId/jobs/:jobId/data/:name   -> { signedUrl }
@@ -36,9 +38,37 @@ class DataConnector {
     });
   }
 
-  async requestJobs(accountId, requestId) {
-    const res = await this.aps.get(`${base(accountId)}/requests/${encodeURIComponent(requestId)}/jobs`);
-    return res?.results ?? (Array.isArray(res) ? res : []);
+  /**
+   * Daily extraction that Autodesk runs on its own servers at the UTC time of effectiveFrom,
+   * until effectiveTo. Emails off: the app tells the user itself.
+   */
+  createDailyRequest(accountId, { description, effectiveFrom, effectiveTo }) {
+    return this.aps.post(`${base(accountId)}/requests`, {
+      description,
+      isActive: true,
+      scheduleInterval: 'DAY',
+      reoccuringInterval: 1,
+      effectiveFrom,
+      effectiveTo,
+      serviceGroups: ['all'],
+      sendEmail: false,
+    });
+  }
+
+  getRequest(accountId, requestId) {
+    return this.aps.get(`${base(accountId)}/requests/${encodeURIComponent(requestId)}`);
+  }
+
+  updateRequest(accountId, requestId, patch) {
+    return this.aps.patch(`${base(accountId)}/requests/${encodeURIComponent(requestId)}`, patch);
+  }
+
+  /** Newest first. A daily request collects many jobs; the API's default order is oldest first. */
+  async requestJobs(accountId, requestId, { limit = 10 } = {}) {
+    const res = await this.aps.get(`${base(accountId)}/requests/${encodeURIComponent(requestId)}/jobs?sort=desc&limit=${limit}&offset=0`);
+    const jobs = res?.results ?? (Array.isArray(res) ? res : []);
+    const at = (j) => String(j.createdAt || j.startedAt || '');
+    return jobs.sort((a, b) => at(b).localeCompare(at(a)));
   }
 
   getJob(accountId, jobId) {

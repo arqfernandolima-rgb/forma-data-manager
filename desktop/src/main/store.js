@@ -15,6 +15,10 @@ const DEFAULT_SETTINGS = {
   hub: null, // { id, accountId, name, region }
   dataDir: '',
   schedule: { enabled: true, time: '06:00' },
+  // 'cloud': Autodesk runs a daily extraction on its servers and the app collects it (falls back to
+  // starting one itself). 'local': the app starts every extraction. See cloud-schedule.js.
+  extractionMode: 'cloud',
+  cloudSchedule: null,
   startAtLogin: true,
   keepVersions: 2,
   keepDownloads: false,

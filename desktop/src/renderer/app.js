@@ -272,25 +272,51 @@ function wFolder() {
   );
 }
 
+/** "Who starts the daily extraction" choice, used by the wizard and Settings. */
+function modeChoice(current) {
+  const name = `mode-${Math.random().toString(36).slice(2, 8)}`;
+  const cloud = h('input', { type: 'radio', name, value: 'cloud', checked: current !== 'local' });
+  const local = h('input', { type: 'radio', name, value: 'local', checked: current === 'local' });
+  const el = h(
+    'div',
+    { class: 'mode-choice' },
+    h('label', { class: 'check' }, cloud, h('span', {}, h('b', {}, 'Autodesk prepares it (recommended). '), 'Autodesk runs the extraction on its servers at that time every day, even when this computer is asleep or off. The app downloads it as soon as the computer is on, and starts one itself if Autodesk’s doesn’t show up.')),
+    h('label', { class: 'check' }, local, h('span', {}, h('b', {}, 'This computer starts it. '), 'The app asks Autodesk for an extraction at that time. If the computer is asleep or off, it runs when the computer is on again.'))
+  );
+  return { el, value: () => (local.checked ? 'local' : 'cloud') };
+}
+
+/** One line about where today's extraction comes from, for Status and Settings. */
+function scheduleSource() {
+  const c = S.cloud || {};
+  if (!S.settings.schedule.enabled) return null;
+  if (c.mode === 'local') return h('p', { class: 'muted small' }, 'Started from this computer.');
+  if (c.active) return h('p', { class: 'muted small' }, 'Prepared by Autodesk on its servers', c.nextExecAt && Date.parse(c.nextExecAt) > Date.now() ? ` · next run ${fmtDate(c.nextExecAt)}` : '', '.');
+  if (c.lastError) return h('p', { class: 'small' }, badge('Autodesk schedule unavailable', 'warn'), ' ', h('span', { class: 'muted', text: `${c.lastError} Syncing from this computer meanwhile; the app retries every hour.` }));
+  return h('p', { class: 'muted small' }, 'Setting up Autodesk’s daily extraction…');
+}
+
 function wSchedule() {
   const enabled = h('input', { type: 'checkbox', checked: S.settings.schedule.enabled });
   const time = h('input', { type: 'time', value: S.settings.schedule.time });
   const login = h('input', { type: 'checkbox', checked: S.settings.startAtLogin });
+  const mode = modeChoice(S.settings.extractionMode);
   return h(
     'div',
     {},
     h('h1', {}, 'Daily sync'),
-    h('p', { class: 'lead' }, 'Once a day the app asks Data Connector for a fresh extract, downloads it and rebuilds the database. Autodesk allows 24 extraction jobs per day per hub and per user, and jobs started in the Forma web UI count too.'),
+    h('p', { class: 'lead' }, 'Once a day Data Connector prepares a fresh extract of your hub, and the app downloads it and rebuilds the database. Autodesk allows 24 extraction jobs per day per hub and per user, and jobs started in the Forma web UI count too.'),
     h(
       'div',
       { class: 'card' },
       h('label', { class: 'check' }, enabled, h('span', {}, 'Sync automatically every day at ', time, ' (local time)')),
-      h('p', { class: 'muted small' }, 'If the computer is off or asleep at that time, the sync runs as soon as the app is running again. It runs every day, even if you also synced manually.'),
+      mode.el,
+      h('p', { class: 'muted small' }, 'It runs every day, even if you also sync manually. Sync now always starts a fresh extraction right away.'),
       h('label', { class: 'check' }, login, h('span', {}, 'Start Forma Data Manager when I sign in to Windows (runs quietly in the tray)'))
     ),
     wNav({
       next: async () => {
-        await call(fdm.updateSettings, { schedule: { enabled: enabled.checked, time: time.value || '06:00' }, startAtLogin: login.checked });
+        await call(fdm.updateSettings, { schedule: { enabled: enabled.checked, time: time.value || '06:00' }, extractionMode: mode.value(), startAtLogin: login.checked });
         wizardStep = 6;
         refresh();
       },
@@ -409,7 +435,7 @@ function wFinish() {
       ['Hub', S.settings.hub?.name || '—'],
       ['Signed in', S.user?.email || (S.signedIn ? 'yes' : 'no')],
       ['Data folder', S.settings.dataDir || '—'],
-      ['Daily sync', S.settings.schedule.enabled ? `every day at ${S.settings.schedule.time}` : 'off'],
+      ['Daily sync', S.settings.schedule.enabled ? `every day at ${S.settings.schedule.time}, ${S.settings.extractionMode === 'local' ? 'started from this computer' : 'prepared by Autodesk'}` : 'off'],
       ['Claude Desktop', S.claude.some((c) => c.state === 'configured') ? 'connected' : 'not set up yet'],
     ].map(([k, v]) => h('tr', {}, h('td', { class: 'muted', text: k }), h('td', { text: v }))))),
     h('label', { class: 'check' }, runNow, h('span', {}, 'Run the first sync now. Depending on hub size, Autodesk takes a few minutes to a couple of hours to prepare the extract; you can close the window meanwhile.')),
@@ -525,7 +551,7 @@ function renderSyncTimeline(sync, running) {
   const sizeKnown = tl.downloadBytes ? fmtBytes(tl.downloadBytes) : null;
 
   const steps = [
-    { title: 'Extraction requested', time: tl.requestedAt, doneText: 'Sent to Autodesk Data Connector.', currentText: 'Sending the request to Autodesk…' },
+    { title: 'Extraction requested', time: tl.requestedAt, doneText: tl.byAutodesk ? 'Started by Autodesk’s daily schedule.' : 'Sent to Autodesk Data Connector.', currentText: 'Sending the request to Autodesk…' },
     { title: 'Confirmed by Autodesk', time: tl.confirmedAt, doneText: tl.jobId ? `Accepted as job ${String(tl.jobId).slice(0, 8)}.` : 'Accepted.', currentText: 'Waiting for Autodesk to accept the request (usually under a minute).' },
     { title: 'Autodesk prepares your extract', time: tl.preparedAt, doneText: tl.preparedAt && autodeskSince ? `Ready after ${fmtSpan(Date.parse(tl.preparedAt) - Date.parse(autodeskSince))}.` : 'Ready.', current: prepCurrent, pendingText: est.prepareMinutes ? `Usually about ${fmtMinutes(est.prepareMinutes)}.` : 'Can take a while; it runs on Autodesk’s servers.' },
     { title: 'Download', time: tl.downloadedAt, doneText: sizeKnown ? `${sizeKnown} downloaded.` : 'Downloaded.', current: dlCurrent, pendingText: est.sizeBytes ? `About ${fmtBytes(est.sizeBytes)} last time.` : null },
@@ -615,7 +641,7 @@ function renderStatus() {
   const info = h(
     'div',
     { class: 'grid' },
-    h('div', { class: 'card' }, h('h2', {}, 'Schedule'), h('p', {}, S.settings.schedule.enabled ? `Every day at ${S.settings.schedule.time}` : 'Automatic sync is off'), h('p', { class: 'muted small' }, S.nextRun ? `Next run: ${fmtDate(S.nextRun)}` : ''), h('p', { class: 'muted small' }, `${S.jobsLast24h} of 24 Data Connector jobs used by this app in the last 24 hours`)),
+    h('div', { class: 'card' }, h('h2', {}, 'Schedule'), h('p', {}, S.settings.schedule.enabled ? `Every day at ${S.settings.schedule.time}` : 'Automatic sync is off'), scheduleSource(), S.cloud?.mode === 'local' || !S.cloud?.active ? h('p', { class: 'muted small' }, S.nextRun ? `Next run: ${fmtDate(S.nextRun)}` : '') : null, h('p', { class: 'muted small' }, `${S.jobsLast24h} of 24 Data Connector jobs used by this app in the last 24 hours`)),
     h('div', { class: 'card' }, h('h2', {}, 'Claude Desktop'), claudeOk ? badge('Connected', 'ok') : claudeOutdated ? badge('Needs update', 'warn') : badge('Not set up', 'info'), h('p', { class: 'muted small' }, claudeOk ? 'Ask Claude about your projects. Restart Claude Desktop after changing settings here.' : 'Connect it so Claude can query the database.'), h('div', { class: 'row' }, btn('Claude setup', () => ((page = 'claude'), render())))),
     h('div', { class: 'card' }, h('h2', {}, 'Hub'), h('p', { text: S.settings.hub?.name || '—' }), h('p', { class: 'muted small mono', text: S.settings.hub?.accountId || '' }), !S.signedIn ? btn('Sign in', async () => (await call(fdm.signIn), refresh()), 'primary') : null)
   );
@@ -663,7 +689,7 @@ function renderHistory() {
       'tr',
       { class: open ? 'open' : '' },
       h('td', { class: 'nowrap', text: fmtDate(r.startedAt) }),
-      h('td', { text: r.trigger }),
+      h('td', { text: r.source === 'autodesk' ? 'scheduled (Autodesk)' : r.trigger }),
       h('td', {}, badge(r.status, kinds[r.status] || 'info')),
       h('td', { class: 'nowrap', text: r.asOf || '—' }),
       h('td', { text: fmtNum(r.rows) }),
@@ -712,8 +738,9 @@ function renderSettings() {
   const login = h('input', { type: 'checkbox', checked: s.startAtLogin });
   const keep = h('input', { type: 'number', value: s.keepVersions, min: 1, max: 5 });
   const keepDl = h('input', { type: 'checkbox', checked: s.keepDownloads });
+  const mode = modeChoice(s.extractionMode);
   const save = async () => {
-    await call(fdm.updateSettings, { clientId: clientId.value, callbackPort: Number(port.value), schedule: { enabled: enabled.checked, time: time.value || '06:00' }, startAtLogin: login.checked, keepVersions: Number(keep.value), keepDownloads: keepDl.checked });
+    await call(fdm.updateSettings, { clientId: clientId.value, callbackPort: Number(port.value), schedule: { enabled: enabled.checked, time: time.value || '06:00' }, extractionMode: mode.value(), startAtLogin: login.checked, keepVersions: Number(keep.value), keepDownloads: keepDl.checked });
     toast('Saved');
     refresh();
   };
@@ -721,16 +748,16 @@ function renderSettings() {
     'div',
     {},
     h('h1', {}, 'Settings'),
-    h('div', { class: 'card' }, h('h2', {}, 'Sync'), h('label', { class: 'check' }, enabled, h('span', {}, 'Sync every day at ', time)), h('label', { class: 'check' }, login, h('span', {}, 'Start with Windows (in the tray)')), h('label', { class: 'field' }, h('span', {}, 'Database versions to keep (for rollback)'), keep), h('label', { class: 'check' }, keepDl, h('span', {}, 'Keep downloaded extract ZIPs (for troubleshooting; they are large)')), btn('Save', save, 'primary')),
+    h('div', { class: 'card' }, h('h2', {}, 'Sync'), h('label', { class: 'check' }, enabled, h('span', {}, 'Sync every day at ', time)), mode.el, scheduleSource(), h('label', { class: 'check' }, login, h('span', {}, 'Start with Windows (in the tray)')), h('label', { class: 'field' }, h('span', {}, 'Database versions to keep (for rollback)'), keep), h('label', { class: 'check' }, keepDl, h('span', {}, 'Keep downloaded extract ZIPs (for troubleshooting; they are large)')), btn('Save', save, 'primary')),
     h('div', { class: 'card' }, h('h2', {}, 'Autodesk app and sign-in'), h('label', { class: 'field' }, h('span', {}, 'APS Client ID'), clientId), h('label', { class: 'field' }, h('span', {}, 'Callback port'), port), h('p', { class: 'small muted' }, 'Callback URL to register in your APS app:'), copybox(S.redirectUri), h('div', { class: 'row' }, btn('Save', save, 'primary'), S.signedIn ? btn('Sign out', async () => (await call(fdm.signOut), refresh()), 'danger') : btn('Sign in', async () => (await call(fdm.signIn), refresh())))),
     h('div', { class: 'card' }, h('h2', {}, 'Hub'), h('p', { text: S.settings.hub ? `${S.settings.hub.name} (${S.settings.hub.accountId})` : 'None' }), btn('Change hub', () => openWizardAt(3))),
     h('div', { class: 'card' }, h('h2', {}, 'Data folder'), h('p', { class: 'mono', text: s.dataDir || '—' }), h('div', { class: 'row' }, btn('Open', () => fdm.openPath('data')), btn('Change…', async () => {
       const picked = await call(fdm.pickDataDir);
       if (!picked) return;
       await call(fdm.setDataDir, picked);
-      toast('Data folder changed. Update Claude Desktop on the Claude setup page, then run a sync.');
+      toast('Data folder changed. Run a sync, then restart Claude Desktop.');
       refresh();
-    })), h('p', { class: 'small muted' }, 'Changing the folder starts fresh there: run a sync, then update Claude Desktop so it points to the new folder.')),
+    })), h('p', { class: 'small muted' }, 'Changing the folder starts fresh there: run a sync. Claude Desktop’s entry is pointed at the new folder automatically; restart Claude Desktop afterwards.')),
     h('div', { class: 'card' }, h('h2', {}, 'Database'), h('p', { class: 'muted small' }, 'Go back to the previous database version if the latest extract looks wrong.'), btn('Roll back to previous version', async () => {
       const r = await call(fdm.rollback);
       toast(`Now using ${r.now_live}`);

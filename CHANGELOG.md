@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.1.0 (2026-11)
+
+### Forma Data Manager (Windows app)
+- **Autodesk prepares the daily extract** (new default): the app creates one daily Data Connector request in your hub, so Autodesk makes the extract at your time even when the PC is asleep or off, and the app downloads it as soon as the PC is on. It keeps that schedule working by itself: daily downloads keep Autodesk from pausing it, a paused schedule is turned back on (or replaced), the end date is moved out a year before it arrives, and the schedule follows time changes and daylight saving time. If a day's run fails or doesn't show up within 45 minutes, the app starts a one-time extraction itself. Autodesk's per-job emails are off.
+- **This computer starts it** is still available in Settings (and the setup wizard) for hubs where you don't want a standing schedule. Switching to it, turning the daily sync off, or uninstalling removes the app's schedule from Data Connector.
+- Upgrading sets up the Autodesk-side schedule automatically on the next start; nothing to do.
+- The Status page's Schedule card shows where the extraction comes from and when Autodesk runs it next; History marks those runs as *scheduled (Autodesk)*; the timeline shows when Autodesk actually started and finished.
+- Changing the data folder no longer tells you to update Claude Desktop by hand (it's automatic since 4.0.2).
+
 ## 4.0.3 (2026-11)
 
 ### Forma Data Manager (Windows app)

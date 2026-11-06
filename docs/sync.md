@@ -2,11 +2,42 @@
 
 A sync gets a fresh copy of the whole hub from Autodesk and rebuilds the local database. It runs **once a day** at the time you choose, and whenever you click **Sync now**.
 
+## Who starts the daily extraction
+
+Settings → Sync (also in the setup wizard) has two choices:
+
+| | **Autodesk prepares it** (default) | **This computer starts it** |
+|---|---|---|
+| Who starts the extraction | Autodesk, on its servers, at your time every day | The app, at your time |
+| PC asleep or off at that time | The extract is still made on time; the app downloads it as soon as the PC is on | The extraction starts when the PC is on again |
+| Data date when you open the laptop late | Your scheduled time | When the PC woke up |
+| Needs at Autodesk | One daily Data Connector request, created and looked after by the app | Nothing that stays: one-time requests, deleted after use |
+
+**Sync now** always starts a fresh one-time extraction, in both modes.
+
+### How the app looks after Autodesk's schedule
+
+The app creates **one** daily request in your hub's Data Connector, named *Forma Data Manager daily extraction (managed by the app)*, with `scheduleInterval: DAY`, a one-year end date and Autodesk's per-job emails turned off. Autodesk pauses daily schedules whose data isn't downloaded for 14 days and stops them at their end date, so the app keeps it working on its own:
+
+- It downloads every day, which is what keeps Autodesk from pausing it.
+- If Autodesk paused it anyway (for example after two weeks away), the app turns it back on. If it's still not producing runs two days later, the app deletes it and creates a new one.
+- When the end date is less than 30 days away, the app moves it out another year.
+- The request fires at a fixed UTC time. When you change the time in Settings, or daylight saving time starts or ends, the app replaces it so it keeps running at your local time.
+- If someone deletes it in Data Connector, the app creates it again. To stop it for good, choose **This computer starts it** or turn the daily sync off: the app deletes it. Uninstalling the app deletes it too.
+- The app checks it at start-up, after you change settings, sign in or change hub, and about twice a day.
+
+Every day after your scheduled time, the app looks for that day's run:
+
+- **Finished or still running**: the app collects it (waits for it if needed), downloads and builds. History shows it as *scheduled (Autodesk)*.
+- **Failed**: the app starts a one-time extraction itself right away.
+- **Not there 45 minutes after the time**: the app starts a one-time extraction itself and remembers the miss; two misses in a row count as "paused" (see above).
+- **Can't be set up** (for example, missing permissions): the Schedule card says so, the app syncs from this computer meanwhile and retries every hour.
+
 ## Phases
 
 | Phase | What happens | Typical time |
 |---|---|---|
-| Requesting | `POST /data-connector/v1/accounts/{hub}/requests` with `scheduleInterval: ONE_TIME`, `serviceGroups: ["all"]` | seconds |
+| Requesting | `POST /data-connector/v1/accounts/{hub}/requests` with `scheduleInterval: ONE_TIME`, `serviceGroups: ["all"]`. Skipped when collecting a run of Autodesk's daily schedule | seconds |
 | Waiting | Polls the request's job (`GET …/requests/{id}/jobs`, then `GET …/jobs/{jobId}`) every 20 s, then every 60 s, until `status: complete` and `completionStatus: success` | minutes to a few hours, depending on hub size and Autodesk's queue |
 | Downloading | `GET …/jobs/{jobId}/data-listing`, then a signed URL for `autodesk_data_extract.zip` (falls back to individual CSVs if there's no ZIP). Size-checked and retried with a fresh signed URL | about a minute for ~120 MB |
 | Building | `forma-data.exe build`: schema-typed load, indexes, views, search index, rollup, column stats, integrity check | under a minute for ~3M rows |
@@ -16,7 +47,7 @@ A sync gets a fresh copy of the whole hub from Autodesk and rebuilds the local d
 
 The Status page shows a timeline with a time for each step:
 
-1. **Extraction requested**: sent to Data Connector.
+1. **Extraction requested**: sent to Data Connector, or *started by Autodesk's daily schedule*.
 2. **Confirmed by Autodesk**: the job ID.
 3. **Autodesk prepares your extract**: how long it has been running, when the app last checked and when it checks next, and an estimate. The estimate is the typical time from your last syncs; for the first sync it shows a typical range. There's no progress bar here, because Autodesk doesn't report progress, and a moving bar would suggest it's almost done. You can close the window: the app keeps checking from the tray.
 4. **Download**: a real progress bar with size, speed and time left.
@@ -30,7 +61,7 @@ The in-flight state is saved after every step (`%APPDATA%\Forma Data Manager\syn
 ## Schedule rules
 
 - The app checks every minute, and right after start-up or waking from sleep.
-- If today's scheduled time has passed and today's run hasn't happened yet, it runs now (catch-up).
+- If today's scheduled time has passed and today's run hasn't happened yet, it runs now (catch-up). With **Autodesk prepares it**, "runs now" means collecting the extract Autodesk already made at your time.
 - It runs every day even if you also clicked **Sync now**; manual syncs don't replace the scheduled one.
 - The schedule needs the app to be running. By default it starts with Windows and stays in the tray. Closing the window keeps it running; use the tray menu → Quit to stop it.
 - While the app runs, the Autodesk sign-in is refreshed regularly, even with the schedule off, so it doesn't expire after ~15 idle days.
@@ -39,7 +70,7 @@ The in-flight state is saved after every step (`%APPDATA%\Forma Data Manager\syn
 
 Autodesk allows **24 Data Connector jobs per rolling 24 hours, per hub and per user**. Jobs started from the Forma web UI count too. The app:
 
-- shows how many jobs **it** started in the last 24 hours,
+- shows how many jobs **it** started in the last 24 hours (including Autodesk's daily run of its schedule),
 - warns at 20 and refuses to start a 25th,
 - never retries a rejected request automatically.
 

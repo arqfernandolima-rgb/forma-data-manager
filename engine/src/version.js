@@ -1,3 +1,3 @@
-export const ENGINE_VERSION = '4.0.3';
+export const ENGINE_VERSION = '4.1.0';
 // Bump when the database layout (tables, views, _meta keys) changes in a way the server depends on.
 export const SCHEMA_VERSION = 4;

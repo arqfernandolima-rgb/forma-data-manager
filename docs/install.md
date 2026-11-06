@@ -25,7 +25,7 @@
 | Sign in | Your browser opens Autodesk sign-in. Tokens are stored encrypted (Windows DPAPI) |
 | Hub | Pick an ACC/BIM 360 hub, or paste the hub (account) ID |
 | Data folder | Where databases are stored. Default `%LOCALAPPDATA%\FormaData`. Avoid OneDrive/Dropbox folders: a new multi-GB file is written daily |
-| Schedule | Daily time (default 06:00) and "start with Windows" |
+| Schedule | Daily time (default 06:00), who starts the extraction (**Autodesk prepares it**, default, or **This computer**) and "start with Windows" |
 | Claude Desktop | Adds `forma-data` to `claude_desktop_config.json` (both Claude Desktop install types are handled; files are backed up first) |
 | Dashboards | Nothing to do: the dashboard guide is built into the server. Optionally add it as a Claude plugin or skill |
 | Finish | Optionally starts the first sync |

@@ -16,6 +16,7 @@ const { DataConnector } = require('./dataconnector');
 const { Engine, engineCommand } = require('./engine');
 const { SyncManager } = require('./sync');
 const { Scheduler } = require('./scheduler');
+const { CloudSchedule } = require('./cloud-schedule');
 const claudeConfig = require('./claude-config');
 const skill = require('./skill');
 const { trayState, TRAY_STATES } = require('./tray-state');
@@ -28,12 +29,19 @@ const LOGIN_ITEM_NAME = 'FormaDataManager'; // also referenced by build/installe
 
 // Called by the uninstaller (not on upgrades): undo what we registered outside our folder.
 if (process.argv.includes('--cleanup-before-uninstall')) {
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     try {
       claudeConfig.uninstall();
     } catch {}
     try {
       app.setLoginItemSettings({ openAtLogin: false, name: LOGIN_ITEM_NAME });
+    } catch {}
+    // Stop Autodesk's daily extraction for this app (best effort, a few seconds at most).
+    try {
+      const c = makeContext();
+      if (c.auth.signedIn && c.store.settings().cloudSchedule?.requestId) {
+        await Promise.race([c.cloud.remove('app uninstalled'), new Promise((r) => setTimeout(r, 8000))]);
+      }
     } catch {}
     app.exit(0);
   });
@@ -84,8 +92,9 @@ function makeContext() {
     n.show();
   };
   const sync = new SyncManager({ store, auth, dc, engine, log, notify });
-  const scheduler = new Scheduler({ store, sync, auth, log });
-  return { store, log, auth, aps, dc, engine, sync, scheduler, skillDir: skill.skillSourceDir(where) };
+  const cloud = new CloudSchedule({ store, dc, auth, log });
+  const scheduler = new Scheduler({ store, sync, auth, log, cloud, dc });
+  return { store, log, auth, aps, dc, engine, sync, cloud, scheduler, skillDir: skill.skillSourceDir(where) };
 }
 
 function iconPath(name) {
@@ -291,6 +300,7 @@ function publicState() {
     history: ctx.store.history().slice(0, 20),
     database: readPointer(dataDir),
     nextRun: ctx.scheduler.nextRun()?.toISOString() ?? null,
+    cloud: ctx.cloud.status(),
     jobsLast24h: ctx.sync.jobsLast24h(),
     engineExe: exe,
     claude: exe ? claudeConfig.inspect(exe, dataDir) : [],
@@ -330,7 +340,7 @@ function registerIpc() {
   handle('state:get', () => publicState());
 
   handle('settings:update', (patch) => {
-    const allowed = ['clientId', 'callbackPort', 'schedule', 'startAtLogin', 'keepVersions', 'keepDownloads'];
+    const allowed = ['clientId', 'callbackPort', 'schedule', 'extractionMode', 'startAtLogin', 'keepVersions', 'keepDownloads'];
     const clean = {};
     for (const k of allowed) if (k in patch) clean[k] = patch[k];
     if ('clientId' in clean) clean.clientId = String(clean.clientId).trim();
@@ -344,8 +354,11 @@ function registerIpc() {
       if (!/^\d{1,2}:\d{2}$/.test(clean.schedule.time || '06:00')) throw new Error('Use a time like 06:00.');
       clean.schedule = { enabled: !!clean.schedule.enabled, time: clean.schedule.time || '06:00' };
     }
+    if ('extractionMode' in clean && !['cloud', 'local'].includes(clean.extractionMode)) throw new Error('Unknown extraction mode.');
     ctx.store.updateSettings(clean);
     applyLoginItem();
+    // New time, mode or schedule on/off: create, move or remove Autodesk's daily extraction.
+    if ('schedule' in clean || 'extractionMode' in clean) ctx.cloud.ensure('settings changed');
     pushState();
     return publicState();
   });
@@ -358,6 +371,7 @@ function registerIpc() {
   handle('auth:signIn', async () => {
     const user = await ctx.auth.signIn();
     showWindow();
+    ctx.cloud.ensure('signed in');
     pushState();
     return user;
   });
@@ -370,6 +384,7 @@ function registerIpc() {
   handle('hub:select', (hub) => {
     if (!hub?.accountId) throw new Error('Pick a hub.');
     ctx.store.updateSettings({ hub: { id: hub.id, accountId: hub.accountId, name: hub.name, region: hub.region } });
+    ctx.cloud.ensure('hub changed');
     pushState();
     return publicState();
   });
@@ -377,6 +392,7 @@ function registerIpc() {
     const id = String(accountId || '').trim().replace(/^b\./, '');
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('A hub (account) ID looks like 8-4-4-4-12 hex characters.');
     ctx.store.updateSettings({ hub: { id: `b.${id}`, accountId: id, name: String(name || '').trim() || id, region: null } });
+    ctx.cloud.ensure('hub changed');
     pushState();
     return publicState();
   });
@@ -452,6 +468,7 @@ function registerIpc() {
   handle('wizard:complete', () => {
     ctx.store.updateSettings({ wizardComplete: true });
     applyLoginItem();
+    ctx.cloud.ensure('setup finished');
     pushState();
     return publicState();
   });
@@ -467,6 +484,7 @@ function registerIpc() {
 
 app.whenReady().then(() => {
   ctx = makeContext();
+  ctx.cloud.onChange = () => pushState();
   registerIpc();
   createWindow();
   createTray();

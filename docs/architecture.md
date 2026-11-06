@@ -5,9 +5,10 @@
 │ main process                                                                                             │
 │   auth.js        OAuth 2.0 + PKCE via system browser → http://localhost:<port>/callback; tokens → DPAPI  │
 │   aps.js         APS client over Electron net.fetch (system proxy aware), retries, readable errors       │
-│   dataconnector  create ONE_TIME request · poll job · data-listing · signed-URL download (size-checked)  │
+│   dataconnector  ONE_TIME / DAY requests · poll job · data-listing · signed-URL download (size-checked)  │
 │   sync.js        persisted state machine: requesting → waiting → downloading → building → done           │
-│   scheduler.js   daily at HH:MM, catch-up after sleep/off, skip if synced < 12 h, sign-in keep-alive     │
+│   scheduler.js   daily at HH:MM, catch-up after sleep/off, collect Autodesk's run or fall back           │
+│   cloud-schedule keeps the Autodesk-side daily request alive: reactivate, extend, follow time/DST        │
 │   engine.js      runs forma-data.exe build/info/rollback, parses JSON-lines progress                     │
 │   claude-config  merge into claude_desktop_config.json (both install types), backup first               │
 │   skill.js       optional: skill ZIP for upload, copy for Claude Code                                    │
@@ -28,7 +29,7 @@
 |---|---|
 | **Data Connector API, user sign-in (PKCE)** | It's the only way to get the full-hub extract. The API accepts 3-legged tokens only. PKCE means no client secret is stored on the PC |
 | **Bring your own APS app** | Each organization controls which apps can reach its hub (Custom Integrations), and nothing depends on a third-party app |
-| **App-triggered daily job** (not a Data Connector schedule) | You choose when it runs, and you can see it in the app. The request list stays tidy because the app deletes its own older one-time requests |
+| **Autodesk-side daily request, managed by the app, with an app-triggered fallback** | Autodesk makes the extract on time even when the PC sleeps; the app keeps that schedule alive (Autodesk pauses unused ones and they expire) and starts a one-time extraction itself if a run is missing or failed. "This computer" mode keeps the old behavior: one-time requests only, deleted after use |
 | **Persisted sync state** | Extraction can take hours; a reboot mustn't create a second job against the 24/day limit |
 | **Electron `net.fetch`** | Uses Chromium's network stack, so corporate proxies and PAC files work like they do in the browser |
 | **Engine compiled with Bun** | Native SQLite (`bun:sqlite`), fast CSV loading, and a single self-contained `.exe`: users don't install Bun or Node, and Claude Desktop starts it directly |

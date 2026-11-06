@@ -12,6 +12,7 @@ const { DataConnector, jobOutcome } = require('../src/main/dataconnector');
 const { SyncManager } = require('../src/main/sync');
 const { Scheduler } = require('../src/main/scheduler');
 const { trayState, TRAY_STATES } = require('../src/main/tray-state');
+const { CloudSchedule } = require('../src/main/cloud-schedule');
 const { changeLines, changeHeading, changeHeadline, changeTable, changeTotals, changeNotes } = require('../src/renderer/changes');
 const { JsonStore } = require('../src/main/store');
 const claudeConfig = require('../src/main/claude-config');
@@ -102,11 +103,12 @@ test('job outcome mapping', () => {
   assert.equal(jobOutcome({ status: 'cancelled' }), 'failed');
 });
 
-function fakeDcFetch({ zipBytes = Buffer.from('PK-fake-zip-bytes'), jobStatuses = ['queued', 'running', 'complete'], truncate = false } = {}) {
+function fakeDcFetch({ zipBytes = Buffer.from('PK-fake-zip-bytes'), jobStatuses = ['queued', 'running', 'complete'], truncate = false, completedAt } = {}) {
   let jobPolls = 0;
   const seen = [];
-  const fetch = async (url, opts = {}) => {
-    seen.push(`${opts.method || 'GET'} ${url.replace('https://developer.api.autodesk.com', '')}`);
+  const fetch = async (fullUrl, opts = {}) => {
+    seen.push(`${opts.method || 'GET'} ${fullUrl.replace('https://developer.api.autodesk.com', '')}`);
+    const url = fullUrl.startsWith('https://signed.example/') ? fullUrl : fullUrl.split('?')[0];
     if (url.startsWith('https://signed.example/')) {
       const body = truncate ? zipBytes.subarray(0, 5) : zipBytes;
       return new Response(body, { status: 200, headers: { 'content-length': String(zipBytes.length) } });
@@ -115,7 +117,7 @@ function fakeDcFetch({ zipBytes = Buffer.from('PK-fake-zip-bytes'), jobStatuses 
     if (url.endsWith('/requests/REQ1/jobs')) return json(200, { results: [{ id: 'JOB1', status: 'queued', createdAt: '2026-11-05T10:00:00Z' }] });
     if (url.endsWith('/jobs/JOB1')) {
       const status = jobStatuses[Math.min(jobPolls++, jobStatuses.length - 1)];
-      return json(200, { id: 'JOB1', status, completionStatus: status === 'complete' ? 'success' : undefined });
+      return json(200, { id: 'JOB1', status, completionStatus: status === 'complete' ? 'success' : undefined, completedAt: status === 'complete' ? completedAt : undefined });
     }
     if (url.endsWith('/jobs/JOB1/data-listing')) return json(200, [{ name: 'README.html', size: 10 }, { name: 'autodesk_data_extract.zip', size: zipBytes.length }, { name: 'issues_issues.csv', size: 5 }]);
     if (url.includes('/jobs/JOB1/data/')) return json(200, { signedUrl: `https://signed.example/${encodeURIComponent(url.split('/data/')[1])}?X-Amz-Signature=abc` });
@@ -331,6 +333,241 @@ test('sync: keeps the change summary in history and mentions it in the notificat
   assert.deepEqual(entry.changes, SAMPLE_CHANGES);
   assert.deepEqual(ctx.store.history()[0].changes, SAMPLE_CHANGES);
   assert.match(ctx.bodies.at(-1), /Issues: 14 new, 3 closed/);
+});
+
+// ── Autodesk's daily extraction ─────────────────────────────────────────────
+function fakeDc() {
+  const calls = [];
+  const dc = {
+    requests: new Map(),
+    jobs: [],
+    nextId: 1,
+    async createDailyRequest(accountId, body) {
+      calls.push(['create', accountId, body]);
+      const id = `DAILY${dc.nextId++}`;
+      const req = { id, isActive: true, scheduleInterval: 'DAY', ...body, nextExecAt: body.effectiveFrom };
+      dc.requests.set(id, req);
+      return req;
+    },
+    async getRequest(accountId, id) {
+      calls.push(['get', id]);
+      if (!dc.requests.has(id)) throw Object.assign(new Error('Not found'), { status: 404 });
+      return dc.requests.get(id);
+    },
+    async updateRequest(accountId, id, patch) {
+      calls.push(['update', id, patch]);
+      Object.assign(dc.requests.get(id), patch);
+      return dc.requests.get(id);
+    },
+    async deleteRequest(accountId, id) {
+      calls.push(['delete', id]);
+      if (!dc.requests.delete(id)) throw Object.assign(new Error('Not found'), { status: 404 });
+    },
+    async requestJobs() {
+      calls.push(['jobs']);
+      return dc.jobs;
+    },
+  };
+  return { dc, calls };
+}
+
+function cloudSetup({ now, mode = 'cloud', time = '06:00' } = {}) {
+  const store = new JsonStore(tmp());
+  store.updateSettings({ wizardComplete: true, hub: { accountId: 'acc-1', name: 'Demo' }, schedule: { enabled: true, time }, extractionMode: mode });
+  const { dc, calls } = fakeDc();
+  const clock = { t: now };
+  const auth = { signedIn: true, tokens: { refresh_token: 'x', obtained_at: Date.now() } };
+  const cloud = new CloudSchedule({ store, dc, auth, log: quietLog, now: () => clock.t });
+  return { store, dc, calls, clock, auth, cloud };
+}
+
+test('Autodesk schedule: created once at the next local time, emails off, a year long', async () => {
+  const now = new Date(2026, 10, 6, 12, 0).getTime(); // Nov 6, noon local
+  const { store, calls, cloud } = cloudSetup({ now });
+  const st = await cloud.ensure('test');
+  assert.equal(st.active, true);
+  const [, accountId, body] = calls.find((c) => c[0] === 'create');
+  assert.equal(accountId, 'acc-1');
+  assert.equal(new Date(body.effectiveFrom).getTime(), new Date(2026, 10, 7, 6, 0).getTime(), 'today 06:00 has passed: starts tomorrow');
+  assert.equal(Math.round((Date.parse(body.effectiveTo) - Date.parse(body.effectiveFrom)) / 86_400_000), 365);
+  assert.match(body.description, /Forma Data Manager/);
+  assert.equal(store.settings().cloudSchedule.time, '06:00');
+  await cloud.ensure('again');
+  assert.equal(calls.filter((c) => c[0] === 'create').length, 1, 'healthy: nothing new created');
+});
+
+test('Autodesk schedule: turned back on when paused, extended before it ends, recreated if it stays paused', async () => {
+  // Jan → Dec of the same year: same side of daylight saving, so the UTC time stays put.
+  const start = new Date(2026, 0, 10, 12, 0).getTime();
+  const { dc, calls, clock, cloud, store } = cloudSetup({ now: start });
+  await cloud.ensure('create');
+  const id = store.settings().cloudSchedule.requestId;
+
+  clock.t = start + 20 * 86_400_000;
+  dc.requests.get(id).isActive = false; // Autodesk paused it (not downloaded for 14 days)
+  await cloud.ensure('check');
+  assert.deepEqual(calls.filter((c) => c[0] === 'update').at(-1), ['update', id, { isActive: true }]);
+
+  clock.t = start + 340 * 86_400_000; // less than 30 days before the end
+  await cloud.ensure('check');
+  const ext = calls.filter((c) => c[0] === 'update').at(-1);
+  assert.ok(Date.parse(ext[2].effectiveTo) > clock.t + 360 * 86_400_000, 'end date moved out a year');
+
+  dc.requests.get(id).isActive = false;
+  await cloud.ensure('paused again'); // reactivates once more (last try was long ago)
+  dc.requests.get(id).isActive = false;
+  await cloud.ensure('still paused'); // tried within 2 days: start over
+  assert.ok(calls.some((c) => c[0] === 'delete' && c[1] === id));
+  assert.notEqual(store.settings().cloudSchedule.requestId, id);
+});
+
+test('Autodesk schedule: new time, daylight saving, deleted at Autodesk, switched off', async () => {
+  const now = new Date(2026, 10, 6, 12, 0).getTime();
+  const { dc, calls, cloud, store } = cloudSetup({ now });
+  await cloud.ensure('create');
+  const first = store.settings().cloudSchedule.requestId;
+
+  store.updateSettings({ schedule: { enabled: true, time: '05:30' } });
+  await cloud.ensure('time changed');
+  const second = store.settings().cloudSchedule.requestId;
+  assert.notEqual(second, first);
+  assert.ok(calls.some((c) => c[0] === 'delete' && c[1] === first));
+  assert.equal(new Date(dc.requests.get(second).effectiveFrom).getHours(), 5);
+
+  // Same local time but its UTC equivalent moved (what a daylight-saving switch looks like).
+  const r = dc.requests.get(second);
+  r.effectiveFrom = new Date(Date.parse(r.effectiveFrom) + 3_600_000).toISOString();
+  await cloud.ensure('dst');
+  const third = store.settings().cloudSchedule.requestId;
+  assert.notEqual(third, second);
+
+  dc.requests.delete(third); // someone deleted it in Data Connector
+  await cloud.ensure('gone');
+  assert.ok(store.settings().cloudSchedule.requestId);
+
+  store.updateSettings({ extractionMode: 'local' });
+  await cloud.ensure('mode');
+  assert.equal(store.settings().cloudSchedule, null);
+  assert.equal(dc.requests.size, 0, 'nothing left running at Autodesk');
+});
+
+test('Autodesk schedule: after a real daylight-saving change it still runs at 06:00 local', async () => {
+  const { dc, clock, cloud, store } = cloudSetup({ now: new Date(2026, 10, 6, 12, 0).getTime() }); // November
+  await cloud.ensure('create');
+  const nov = store.settings().cloudSchedule.requestId;
+  clock.t = new Date(2027, 2, 20, 12, 0).getTime(); // March, after clocks moved forward
+  await cloud.ensure('check');
+  const mar = store.settings().cloudSchedule.requestId;
+  const from = new Date(dc.requests.get(mar).effectiveFrom);
+  if (new Date(2026, 10, 6).getTimezoneOffset() !== new Date(2027, 2, 20).getTimezoneOffset()) {
+    assert.notEqual(mar, nov, 'recreated for the new UTC offset');
+  }
+  assert.equal(from.getHours(), 6);
+  assert.equal(from.getMinutes(), 0);
+});
+
+test('Autodesk schedule: errors are kept for the UI, never thrown', async () => {
+  const { dc, cloud, store } = cloudSetup({ now: Date.now() });
+  dc.createDailyRequest = async () => {
+    throw Object.assign(new Error('You need Executive Overview access.'), { status: 403 });
+  };
+  const st = await cloud.ensure('test');
+  assert.equal(st.active, false);
+  assert.match(store.settings().cloudSchedule.lastError, /Executive Overview/);
+});
+
+function schedulerWithCloud({ now, jobs = [], history = [] } = {}) {
+  const setup = cloudSetup({ now: now.getTime() });
+  const started = [];
+  const collected = [];
+  const sync = { busy: false, start: (t) => (started.push(t), Promise.resolve()), collect: (job, req, t) => (collected.push({ job, req, t }), Promise.resolve()) };
+  for (const h of history) setup.store.addHistory(h);
+  setup.dc.jobs = jobs;
+  const clock = { now };
+  const sch = new Scheduler({ store: setup.store, sync, auth: setup.auth, log: quietLog, cloud: setup.cloud, dc: setup.dc, now: () => clock.now });
+  return { ...setup, sch, started, collected, clock };
+}
+
+test('scheduler + Autodesk: collects today’s run (even hours later), waits for it, or falls back', async () => {
+  // Schedule created the day before, so Autodesk's 06:00 run is expected today.
+  const created = new Date(2026, 10, 5, 12, 0);
+  const t = schedulerWithCloud({ now: created });
+  await t.cloud.ensure('setup');
+  t.store.updateSettings({ cloudSchedule: { ...t.store.settings().cloudSchedule, createdAt: created.toISOString(), checkedAt: new Date(2026, 10, 6, 5, 0).toISOString() } });
+  const req = t.store.settings().cloudSchedule.requestId;
+
+  // 06:02, no job yet: wait (and don't ask again for a few minutes).
+  t.clock.now = new Date(2026, 10, 6, 6, 2);
+  assert.equal(t.sch.check(), 'checking-autodesk');
+  assert.equal(await t.sch.autodeskCheck, 'waiting-for-autodesk');
+  assert.equal(t.sch.check(), 'waiting-for-autodesk');
+  assert.equal(t.started.length + t.collected.length, 0);
+
+  // 09:57 (PC was asleep): Autodesk's 06:00 job finished long ago → collect it, no new extraction.
+  t.dc.jobs = [{ id: 'J-0600', status: 'complete', completionStatus: 'success', createdAt: new Date(2026, 10, 6, 6, 0).toISOString() }];
+  t.clock.now = new Date(2026, 10, 6, 9, 57);
+  t.sch.check();
+  assert.equal(await t.sch.autodeskCheck, 'collecting');
+  assert.deepEqual(t.collected.map((c) => [c.job.id, c.req, c.t]), [['J-0600', req, 'scheduled']]);
+  assert.equal(t.started.length, 0);
+  assert.equal(t.sch.check(), 'already-ran');
+
+  // Next day: Autodesk's run never showed up → after 45 min the app starts one itself, and notes the miss.
+  t.dc.jobs = [];
+  t.sch.lastAutodeskPoll = 0;
+  t.clock.now = new Date(2026, 10, 7, 6, 50);
+  t.sch.check();
+  assert.equal(await t.sch.autodeskCheck, 'started');
+  assert.deepEqual(t.started, ['scheduled']);
+  assert.equal(t.store.settings().cloudSchedule.missedDays, 1);
+
+  // Day after: Autodesk's run failed → start one here right away.
+  t.dc.jobs = [{ id: 'J-bad', status: 'failed', createdAt: new Date(2026, 10, 8, 6, 0).toISOString() }];
+  t.sch.lastAutodeskPoll = 0;
+  t.clock.now = new Date(2026, 10, 8, 6, 20);
+  t.sch.check();
+  assert.equal(await t.sch.autodeskCheck, 'started');
+  assert.equal(t.started.length, 2);
+  assert.equal(t.store.settings().cloudSchedule.missedDays, 0, 'a run showed up (it failed, but the schedule works)');
+});
+
+test('scheduler + Autodesk: a schedule created after today’s time is not a miss; "This computer" mode never looks at Autodesk', async () => {
+  const t = schedulerWithCloud({ now: new Date(2026, 10, 6, 12, 0) });
+  await t.cloud.ensure('setup'); // created at noon: first Autodesk run is tomorrow 06:00
+  t.store.updateSettings({ cloudSchedule: { ...t.store.settings().cloudSchedule, checkedAt: new Date(2026, 10, 6, 12, 0).toISOString() } });
+  t.sch.check();
+  assert.equal(await t.sch.autodeskCheck, 'started', 'today still gets data, from this computer');
+  assert.equal(t.store.settings().cloudSchedule.missedDays ?? 0, 0);
+
+  const l = schedulerWithCloud({ now: new Date(2026, 10, 6, 6, 1) });
+  l.store.updateSettings({ extractionMode: 'local' });
+  assert.equal(l.sch.check(), 'started');
+  assert.equal(l.calls.filter((c) => c[0] === 'jobs').length, 0);
+});
+
+test('upgrade from 4.0.x: first check sets up Autodesk’s schedule, no extra sync the same day', async () => {
+  const t = schedulerWithCloud({ now: new Date(2026, 10, 6, 12, 0) });
+  t.store.updateSettings({ lastScheduledRunDate: '2026-11-06', extractionMode: undefined }); // 4.0.x had neither
+  assert.equal(t.sch.check(), 'already-ran');
+  await t.cloud.inFlight;
+  const cs = t.store.settings().cloudSchedule;
+  assert.ok(cs.requestId, 'created on the first check');
+  assert.equal(new Date(cs.nextExecAt).getTime(), new Date(2026, 10, 7, 6, 0).getTime(), 'first Autodesk run: tomorrow 06:00');
+  assert.equal(t.started.length + t.collected.length, 0);
+});
+
+test('sync: collecting Autodesk’s job skips creating a request and keeps Autodesk’s own timing', async () => {
+  const { fetch, seen } = fakeDcFetch({ jobStatuses: ['complete'], completedAt: '2026-11-05T11:06:00Z' });
+  const ctx = makeSync({ dcFetch: fetch });
+  ctx.store.updateSettings({ cloudSchedule: { requestId: 'DAILY1', accountId: 'acc-1' } });
+  const entry = await ctx.sync.collect({ id: 'JOB1', status: 'complete', createdAt: '2026-11-05T11:00:00Z' }, 'DAILY1', 'scheduled');
+  assert.equal(entry.status, 'success');
+  assert.equal(entry.source, 'autodesk');
+  assert.equal(entry.jobId, 'JOB1');
+  assert.equal(entry.prepareMinutes, 6, 'from Autodesk’s createdAt to completedAt');
+  assert.equal(seen.filter((x) => x.startsWith('POST')).length, 0, 'no new request');
+  assert.ok(!seen.some((x) => x.startsWith('DELETE') && x.includes('DAILY1')), 'the daily request is never cleaned up');
+  assert.equal(ctx.sync.jobsLast24h(), 1, 'Autodesk’s daily run counts toward the 24');
 });
 
 test('scheduler: runs once a day after the set time, catches up, and runs even after a manual sync', () => {

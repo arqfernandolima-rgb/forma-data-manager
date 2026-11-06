@@ -20,7 +20,9 @@ Start with the **History** page and the log (`%APPDATA%\Forma Data Manager\logs\
 | "Data Connector limit reached" / 429 | 24 jobs per rolling 24 hours, per hub and per user, including jobs started in the Forma web UI. Wait, then try again |
 | "The new extract looks incomplete" | It has less than half the rows of the current database. Check the job in Data Connector. **Use it anyway** if the drop is expected (e.g. projects were archived), otherwise **Discard** |
 | Download fails repeatedly | Signed URLs are retried with fresh links 4 times. Check the proxy or VPN. The app uses the same network settings as your browser |
-| Scheduled sync didn't run | The app must be running (tray). Check **Start with Windows** in Settings. It catches up as soon as it runs (for example when the PC wakes up) |
+| Scheduled sync didn't run | The app must be running (tray). Check **Start with Windows** in Settings. It catches up as soon as it runs (for example when the PC wakes up). With **Autodesk prepares it**, the extract is made at your time even if the PC was asleep, and the app collects it on wake |
+| Schedule card says "Autodesk schedule unavailable" | The app couldn't create or check its daily Data Connector request (the message says why; usually permissions: you need Executive Overview on the hub). It syncs from this computer meanwhile and retries every hour. Or choose **This computer starts it** in Settings |
+| A "Forma Data Manager daily extraction" request in Data Connector | That's the app's daily schedule. Leave it: the app maintains it. To remove it, choose **This computer starts it** in Settings |
 | Not enough disk space | Each sync needs room for the download plus two database versions. Lower "versions to keep" to 1, or move the data folder |
 
 ## Claude

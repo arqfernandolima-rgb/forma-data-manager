@@ -90,6 +90,9 @@ class ApsClient {
   del(p, o) {
     return this.request('DELETE', p, o);
   }
+  patch(p, body, o) {
+    return this.request('PATCH', p, { ...o, body });
+  }
 
   /** ACC / BIM 360 hubs the user can see. accountId = hub id without the "b." prefix. */
   async listHubs() {

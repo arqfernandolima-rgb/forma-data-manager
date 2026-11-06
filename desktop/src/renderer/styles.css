@@ -177,3 +177,8 @@ table.mini { width: auto; min-width: 340px; font-size: 12px; margin-bottom: 4px;
 table.mini th, table.mini td { padding: 4px 18px 4px 0; border-bottom: 1px solid var(--line); }
 table.mini tr:last-child td { border-bottom: 0; }
 table.mini .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Who starts the daily extraction */
+.mode-choice { margin: 6px 0 4px 26px; display: flex; flex-direction: column; gap: 6px; }
+.mode-choice .check { margin: 0; }
+.mode-choice .check span { font-size: 13px; }

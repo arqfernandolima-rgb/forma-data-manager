@@ -48,10 +48,14 @@ class SyncManager extends EventEmitter {
     this.emit('update', this.status);
   }
 
-  /** Jobs this app started in the last 24h (UI-started jobs at Autodesk also count, but we can't see those). */
+  /**
+   * Jobs this app started in the last 24h, plus one for Autodesk's daily run when that schedule
+   * exists (UI-started jobs at Autodesk also count toward the limit, but we can't see those).
+   */
   jobsLast24h() {
+    const s = this.store.settings();
     const since = this.now() - DAY;
-    return (this.store.settings().ownedRequests || []).filter((r) => Date.parse(r.createdAt) > since).length;
+    return (s.ownedRequests || []).filter((r) => Date.parse(r.createdAt) > since).length + (s.cloudSchedule?.requestId ? 1 : 0);
   }
 
   preflight() {
@@ -70,6 +74,31 @@ class SyncManager extends EventEmitter {
     if (problem) return Promise.reject(new Error(problem));
     const s = this.store.settings();
     const state = { trigger, startedAt: new Date(this.now()).toISOString(), accountId: s.hub.accountId, hubName: s.hub.name, phase: 'requesting' };
+    this.store.setSyncState(state);
+    return this.launch(state);
+  }
+
+  /**
+   * Collect a job that Autodesk's daily schedule started (cloud-schedule.js): no new request,
+   * the pipeline starts at "waiting" and polls, downloads and builds as usual.
+   */
+  collect(job, requestId, trigger = 'scheduled') {
+    if (this.running) return this.running;
+    const s = this.store.settings();
+    if (!this.auth.signedIn) return Promise.reject(new Error('Sign in to Autodesk first.'));
+    if (!s.hub?.accountId || !s.dataDir) return Promise.reject(new Error('Finish setup first.'));
+    const at = job.createdAt || job.startedAt || new Date(this.now()).toISOString();
+    const state = {
+      trigger,
+      source: 'autodesk',
+      startedAt: new Date(this.now()).toISOString(),
+      accountId: s.hub.accountId,
+      hubName: s.hub.name,
+      phase: 'waiting',
+      requestId,
+      jobId: job.id,
+      timeline: { requestedAt: at, confirmedAt: at, requestId, jobId: job.id, byAutodesk: true },
+    };
     this.store.setSyncState(state);
     return this.launch(state);
   }
@@ -163,6 +192,7 @@ class SyncManager extends EventEmitter {
     if (state.phase === 'waiting') {
       const waitStart = this.now();
       let polls = 0;
+      let finishedAt = null;
       for (;;) {
         if (signal.aborted) throw new SyncCancelled('Sync cancelled.');
         if (!state.jobId) {
@@ -181,7 +211,13 @@ class SyncManager extends EventEmitter {
           const job = await this.dc.getJob(state.accountId, state.jobId);
           const outcome = jobOutcome(job);
           jobStatus = job?.status ?? null;
-          if (outcome === 'success') break;
+          if (outcome === 'success') {
+            // A job Autodesk finished hours ago (PC was asleep) should show when it really finished.
+            const done = Date.parse(job?.completedAt || '');
+            const asked = Date.parse(state.timeline?.confirmedAt || state.timeline?.requestedAt || '') || 0;
+            finishedAt = Number.isFinite(done) && done >= asked && done <= this.now() ? new Date(done).toISOString() : null;
+            break;
+          }
           if (outcome === 'failed') throw new Error(`The Data Connector job ended with status "${job?.status}"${job?.completionStatus ? ` / "${job.completionStatus}"` : ''}. Check Data Connector in Forma for details.`);
           if (this.now() - waitStart > WAIT_FOR_RESULT_MS) throw new Error('The Data Connector job is still running after 10 hours. It may finish later; run Sync now again to pick it up.');
         }
@@ -197,7 +233,7 @@ class SyncManager extends EventEmitter {
         await this.sleep(waitMs, signal);
       }
       state.phase = 'downloading';
-      this.mark(state, { preparedAt: iso() });
+      this.mark(state, { preparedAt: finishedAt || iso() });
     }
 
     // 3. Download
@@ -263,6 +299,7 @@ class SyncManager extends EventEmitter {
     const entry = {
       status: 'success',
       trigger: state.trigger,
+      source: state.source || 'app', // 'autodesk' = Autodesk's daily schedule ran the extraction
       startedAt: state.startedAt,
       finishedAt: new Date(finished).toISOString(),
       minutes: Math.round((finished - t0) / 6000) / 10,
