@@ -96,6 +96,39 @@ function install(exePath, dataDir) {
   return results;
 }
 
+/**
+ * Keep an existing registration pointing at this install and data folder.
+ * Run at start-up and after the data folder changes: if the app was reinstalled into
+ * another folder (e.g. moved to D:\Apps), Claude Desktop would otherwise keep launching
+ * a forma-data.exe that no longer exists, or keep reading the old data folder.
+ * Only rewrites entries that already exist; never adds one the user didn't set up or removed.
+ * @returns {Array<{file, kind, ok, backup?, from?, error?}>} one item per file it changed or failed on
+ */
+function repair(exePath, dataDir) {
+  if (!exePath) return [];
+  const want = serverEntry(exePath, dataDir);
+  const results = [];
+  for (const t of candidateConfigPaths().filter((c) => c.exists && fs.existsSync(c.file))) {
+    try {
+      const { config } = readConfig(t.file);
+      const entry = config?.mcpServers?.[SERVER_KEY];
+      if (!entry) continue;
+      if (entry.command === want.command && entry.env?.FORMA_DATA_DIR === want.env.FORMA_DATA_DIR) continue;
+      const backup = `${t.file}.bak-${stamp()}`;
+      fs.copyFileSync(t.file, backup);
+      // Keep anything else the user added to the entry (extra env vars, etc.).
+      config.mcpServers[SERVER_KEY] = { ...entry, command: want.command, args: want.args, env: { ...(entry.env || {}), ...want.env } };
+      const tmp = `${t.file}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(config, null, 2) + '\n');
+      fs.renameSync(tmp, t.file);
+      results.push({ file: t.file, kind: t.kind, ok: true, backup, from: entry.command });
+    } catch (e) {
+      results.push({ file: t.file, kind: t.kind, ok: false, error: e instanceof SyntaxError ? `Not valid JSON, left untouched: ${e.message}` : e.message });
+    }
+  }
+  return results;
+}
+
 function uninstall() {
   const results = [];
   for (const t of candidateConfigPaths().filter((c) => c.exists && fs.existsSync(c.file))) {
@@ -118,4 +151,4 @@ function claudeCodeCommand(exePath, dataDir) {
   return `claude mcp add ${SERVER_KEY} --scope user -e FORMA_DATA_DIR="${dataDir}" -- "${exePath}" serve`;
 }
 
-module.exports = { candidateConfigPaths, inspect, install, uninstall, claudeCodeCommand, serverEntry, SERVER_KEY };
+module.exports = { candidateConfigPaths, inspect, install, repair, uninstall, claudeCodeCommand, serverEntry, SERVER_KEY };

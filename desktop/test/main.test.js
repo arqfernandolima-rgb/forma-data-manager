@@ -322,6 +322,43 @@ test('Claude Desktop config: merges, backs up, keeps other servers, leaves inval
   assert.equal(claudeConfig.inspect('C:\\Apps\\forma-data.exe', 'E:\\Other')[0].state, 'outdated');
 });
 
+test('Claude Desktop config repair: follows the app to a new folder, never adds or touches anything else', () => {
+  const root = tmp();
+  process.env.APPDATA = path.join(root, 'Roaming');
+  process.env.LOCALAPPDATA = path.join(root, 'Local');
+  const regular = path.join(process.env.APPDATA, 'Claude');
+  fs.mkdirSync(regular, { recursive: true });
+  const file = path.join(regular, 'claude_desktop_config.json');
+  const oldExe = 'C:\\Users\\f\\AppData\\Local\\Programs\\Forma Data Manager\\resources\\engine\\forma-data.exe';
+  const newExe = 'D:\\Apps\\Forma Data Manager\\resources\\engine\\forma-data.exe';
+  const read = () => JSON.parse(fs.readFileSync(file, 'utf8'));
+
+  // Not registered (never set up, or removed by the user): repair leaves it alone.
+  fs.writeFileSync(file, JSON.stringify({ mcpServers: { other: { command: 'x' } } }));
+  assert.deepEqual(claudeConfig.repair(newExe, 'C:\\FormaData'), []);
+  assert.equal(read().mcpServers['forma-data'], undefined);
+
+  // Registered at the old folder: re-pointed, extra env kept, other servers untouched, backup made.
+  fs.writeFileSync(file, JSON.stringify({ mcpServers: { other: { command: 'x' }, 'forma-data': { command: oldExe, args: ['serve'], env: { FORMA_DATA_DIR: 'C:\\FormaData', EXTRA: '1' } } } }));
+  const res = claudeConfig.repair(newExe, 'C:\\FormaData');
+  assert.equal(res.length, 1);
+  assert.equal(res[0].ok, true);
+  assert.equal(res[0].from, oldExe);
+  assert.ok(fs.existsSync(res[0].backup));
+  assert.deepEqual(read().mcpServers['forma-data'], { command: newExe, args: ['serve'], env: { FORMA_DATA_DIR: 'C:\\FormaData', EXTRA: '1' } });
+  assert.deepEqual(read().mcpServers.other, { command: 'x' });
+
+  // Already current: nothing to do. Data folder changed: follows it.
+  assert.deepEqual(claudeConfig.repair(newExe, 'C:\\FormaData'), []);
+  assert.equal(claudeConfig.repair(newExe, 'D:\\FormaData')[0].ok, true);
+  assert.equal(read().mcpServers['forma-data'].env.FORMA_DATA_DIR, 'D:\\FormaData');
+
+  // Unparseable file: reported, left byte-for-byte as is.
+  fs.writeFileSync(file, '{ not json');
+  assert.equal(claudeConfig.repair(newExe, 'C:\\FormaData')[0].ok, false);
+  assert.equal(fs.readFileSync(file, 'utf8'), '{ not json');
+});
+
 test('skill ZIP: folder inside, valid archive, edited SKILL.md validated', () => {
   const src = path.join(__dirname, '..', '..', 'claude-plugin', 'skills', 'forma-data-dashboards');
   const out = skill.writeSkillZip(src, tmp());

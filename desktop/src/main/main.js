@@ -215,6 +215,36 @@ function applyLoginItem() {
   app.setLoginItemSettings({ openAtLogin: !!(s.startAtLogin && s.wizardComplete), args: ['--hidden'], name: LOGIN_ITEM_NAME });
 }
 
+/**
+ * If Claude Desktop already has our entry but it points at an old install folder or data
+ * folder (app reinstalled elsewhere, or data folder changed in Settings), point it here.
+ * Installed builds only, so a dev run never repoints your real Claude Desktop.
+ */
+function repairClaudeRegistration(reason) {
+  if (!app.isPackaged || !ctx.engine.exePath) return;
+  const s = ctx.store.settings();
+  let res;
+  try {
+    res = claudeConfig.repair(ctx.engine.exePath, s.dataDir || defaultDataDir());
+  } catch (e) {
+    ctx.log.warn(`Claude Desktop registration check failed: ${e.message}`);
+    return;
+  }
+  if (!res.length) return;
+  ctx.log.info(`Claude Desktop registration updated (${reason}): ${JSON.stringify(res.map((r) => ({ file: r.file, ok: r.ok, from: r.from, error: r.error })))}`);
+  if (res.some((r) => r.ok) && Notification.isSupported()) {
+    const moved = res.some((r) => r.ok && r.from !== ctx.engine.exePath);
+    const n = new Notification({
+      title: 'Claude Desktop entry updated',
+      body: moved
+        ? 'Forma Data Manager is in a new folder, so Claude Desktop now points there. Fully quit and reopen Claude Desktop to pick it up.'
+        : 'Claude Desktop now reads your current data folder. Fully quit and reopen Claude Desktop to pick it up.',
+    });
+    n.on('click', showWindow);
+    n.show();
+  }
+}
+
 function readPointer(dataDir) {
   try {
     return JSON.parse(fs.readFileSync(path.join(dataDir, 'current.json'), 'utf8'));
@@ -361,6 +391,7 @@ function registerIpc() {
     const info = folderInfo(dir);
     if (!info.writable) throw new Error(`Can't write to ${dir}: ${info.error || 'permission denied'}`);
     ctx.store.updateSettings({ dataDir: path.resolve(dir) });
+    repairClaudeRegistration('data-folder');
     pushState();
     return info;
   });
@@ -443,7 +474,8 @@ app.whenReady().then(() => {
   ctx.sync.resume();
   ctx.scheduler.start();
   powerMonitor.on('resume', () => setTimeout(() => ctx.scheduler.check(), 30_000));
-  applyLoginItem();
+  applyLoginItem(); // also re-points the "start with Windows" entry if the app moved
+  repairClaudeRegistration('start-up');
 });
 
 app.on('second-instance', showWindow);

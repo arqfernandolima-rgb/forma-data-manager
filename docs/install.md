@@ -12,8 +12,9 @@
 1. Download `Forma-Data-Manager-Setup-<version>.exe` and `SHA256SUMS.txt` from the repository's **Releases** page.
 2. Optional: verify the file in PowerShell with `Get-FileHash .\Forma-Data-Manager-Setup-<version>.exe` and compare it with `SHA256SUMS.txt`.
 3. Run the installer. It isn't code-signed yet, so Windows SmartScreen may say "Windows protected your PC": choose **More info → Run anyway**.
-4. Read and accept the license and disclaimer. The install is per-user, so no admin rights are needed. The default location is `%LOCALAPPDATA%\Programs\forma-data-manager`.
-5. The setup wizard opens when the installer finishes.
+4. Read and accept the license and disclaimer. The install is per-user, so no admin rights are needed.
+5. Choose the install folder. The default is `%LOCALAPPDATA%\Programs\Forma Data Manager`; any folder you can write to works (for example `D:\Apps\Forma Data Manager`). Updates keep using the folder you pick.
+6. The setup wizard opens when the installer finishes.
 
 ## The setup wizard
 
@@ -37,7 +38,7 @@ You can re-run any step later from **Settings → Run the setup wizard again**.
 
 | What | Where |
 |---|---|
-| App | `%LOCALAPPDATA%\Programs\forma-data-manager` |
+| App | The install folder you chose (default `%LOCALAPPDATA%\Programs\Forma Data Manager`) |
 | Settings, encrypted tokens, sync history | `%APPDATA%\Forma Data Manager` |
 | Logs | `%APPDATA%\Forma Data Manager\logs\forma-data-manager.log` |
 | Databases, `current.json`, temporary downloads | The data folder you chose (default `%LOCALAPPDATA%\FormaData`) |
@@ -45,7 +46,15 @@ You can re-run any step later from **Settings → Run the setup wizard again**.
 
 ## Updating
 
-Install the new version over the old one. Settings, sign-in, schedule and data are kept, and the Claude Desktop entry keeps working because the app's path doesn't change. If the release notes say the database layout changed, run **Sync now** afterwards.
+Install the new version over the old one. Settings, sign-in, schedule and data are kept, and it installs into the same folder as before. If the release notes say the database layout changed, run **Sync now** afterwards.
+
+### Moving the app to another folder
+
+Run the installer again (same or newer version) and pick the new folder on the install-location page. The installer removes the copy in the old folder and keeps your settings, sign-in and data. Future updates use the new folder.
+
+On its next start, the app points Claude Desktop's `forma-data` entry and the "start with Windows" entry at the new folder and shows a notification. Fully quit and reopen Claude Desktop afterwards. If you added the server to **Claude Code**, run the command from **Claude setup** again, since Claude Code keeps the old path. Changing the data folder in **Settings** updates Claude Desktop the same way.
+
+Don't uninstall first: a real uninstall also removes the Claude Desktop entry (by design), so you'd have to set it up again from **Claude setup**.
 
 ## Uninstall
 
