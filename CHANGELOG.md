@@ -1,11 +1,16 @@
 # Changelog
 
+## 4.0.2 (2026-11)
+
+### Forma Data Manager (Windows app)
+- If you move the app to another folder (run the installer and pick a new location) or change the data folder in Settings, the app now updates its Claude Desktop entry to match on start-up and tells you to restart Claude Desktop. Before, Claude Desktop kept the old path and the forma-data tools stopped working. It only updates an entry you set up; it never adds one back after you removed it.
+- Docs: how to move the app to another folder; corrected the default install folder name.
+
 ## 4.0.1 (2026-11)
 
 ### Forma Data Manager (Windows app)
 - Fixed: after a sync finished or failed, the tray icon and the Status page could stay on "syncing" (with a Cancel button) until you restarted the app.
 - The project moved to [github.com/arqfernandolima-rgb/forma-data-manager](https://github.com/arqfernandolima-rgb/forma-data-manager). The app's links, the Claude plugin marketplace and the docs point there. Fixed the in-app links to the APS setup guide and the license, which pointed at a branch without those files.
-- If you move the app to another folder (run the installer and pick a new location) or change the data folder in Settings, the app now updates its Claude Desktop entry to match on start-up and tells you to restart Claude Desktop. Before, Claude Desktop kept the old path and the forma-data tools stopped working. It only updates an entry you set up; it never adds one back after you removed it.
 - The tray icon now shows the app's state by color: gray not ready (setup unfinished or no data yet), blue syncing, green ready, amber stale (data more than 2 days old), red needs attention (last sync failed, extract waiting for review, or sign-in expired). The tooltip and a new first line in the tray menu say which, and it re-checks every minute so data turns stale on its own.
 
 ## 4.0.0 (2026-11)
