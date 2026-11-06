@@ -3,7 +3,7 @@
 ## 4.0.1 (2026-11)
 
 ### Forma Data Manager (Windows app)
-- Fixed: the tray icon stayed on "syncing" after a sync finished or failed.
+- Fixed: after a sync finished or failed, the tray icon and the Status page could stay on "syncing" (with a Cancel button) until you restarted the app.
 - The tray icon now shows the app's state by color: gray not ready (setup unfinished or no data yet), blue syncing, green ready, amber stale (data more than 2 days old), red needs attention (last sync failed, extract waiting for review, or sign-in expired). The tooltip and a new first line in the tray menu say which, and it re-checks every minute so data turns stale on its own.
 
 ## 4.0.0 (2026-11)
