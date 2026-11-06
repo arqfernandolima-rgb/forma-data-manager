@@ -11,6 +11,7 @@ const { ApsClient } = require('../src/main/aps');
 const { DataConnector, jobOutcome } = require('../src/main/dataconnector');
 const { SyncManager } = require('../src/main/sync');
 const { Scheduler } = require('../src/main/scheduler');
+const { trayState, TRAY_STATES } = require('../src/main/tray-state');
 const { JsonStore } = require('../src/main/store');
 const claudeConfig = require('../src/main/claude-config');
 const skill = require('../src/main/skill');
@@ -235,6 +236,43 @@ test('sync: refuses to start past the 24 jobs/day limit', async () => {
   const ctx = makeSync({ dcFetch: fetch });
   ctx.store.updateSettings({ ownedRequests: Array.from({ length: 24 }, (_, i) => ({ id: `R${i}`, createdAt: new Date().toISOString() })) });
   await assert.rejects(ctx.sync.start('manual'), /24 Data Connector jobs/);
+});
+
+test('sync: update listeners see busy for the whole run and idle once it ends (tray must not stick on "syncing")', async () => {
+  for (const engineError of [null, new Error('engine crashed')]) {
+    const { fetch } = fakeDcFetch();
+    const ctx = makeSync({ dcFetch: fetch, engineError });
+    const seen = [];
+    ctx.sync.on('update', (st) => seen.push({ busy: ctx.sync.busy, phase: st.phase }));
+    const entry = await ctx.sync.start('manual');
+    assert.equal(entry.status, engineError ? 'failed' : 'success');
+    assert.ok(seen.length > 2);
+    assert.ok(seen.slice(0, -1).every((u) => u.busy), 'busy on every update while the pipeline runs, including the first');
+    assert.deepEqual(seen.at(-1), { busy: false, phase: engineError ? 'failed' : 'done' }, 'a final update reports idle');
+    assert.equal(ctx.sync.busy, false);
+  }
+});
+
+test('tray state: priority and colors for each situation', () => {
+  const now = Date.parse('2026-11-10T09:00:00');
+  const base = { busy: false, wizardComplete: true, signedIn: true, database: { as_of: '2026-11-10' }, lastSync: { status: 'success' }, pendingReview: false, now };
+  const key = (p) => trayState({ ...base, ...p }).key;
+  assert.equal(key({}), 'ready');
+  assert.equal(key({ database: { as_of: '2026-11-08' } }), 'ready', '2 days old is still current, same as the window badge');
+  assert.equal(key({ database: { as_of: '2026-11-07' } }), 'stale');
+  assert.match(trayState({ ...base, database: { as_of: '2026-11-01' } }).label, /9 days old/);
+  assert.equal(key({ database: { as_of: '2026-11-11' } }), 'ready', 'as_of is a UTC date and can be "tomorrow" in the evening');
+  assert.equal(key({ database: null }), 'notready');
+  assert.equal(key({ wizardComplete: false, signedIn: false, database: null }), 'notready');
+  assert.equal(key({ signedIn: false }), 'attention');
+  assert.equal(key({ lastSync: { status: 'failed' } }), 'attention');
+  assert.equal(key({ lastSync: { status: 'cancelled' } }), 'ready', 'a cancel is not a problem');
+  assert.equal(key({ pendingReview: true }), 'attention');
+  assert.equal(key({ busy: true, phase: 'downloading', lastSync: { status: 'failed' }, database: null }), 'syncing', 'syncing wins');
+  assert.match(trayState({ busy: true, phase: 'waiting' }).label, /preparing/);
+  for (const k of TRAY_STATES) {
+    for (const f of [`tray-${k}.png`, `tray-${k}@2x.png`]) assert.ok(fs.existsSync(path.join(__dirname, '..', 'assets', f)), `missing ${f}`);
+  }
 });
 
 test('scheduler: runs once a day after the set time, catches up, skips after a recent sync', () => {

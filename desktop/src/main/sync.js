@@ -86,12 +86,20 @@ class SyncManager extends EventEmitter {
   }
 
   launch(state, { resumed = false } = {}) {
-    this.abort = new AbortController();
-    this.running = this.pipeline(state, this.abort.signal)
+    const abort = new AbortController();
+    this.abort = abort;
+    // Start the pipeline on the next microtask so `running` is already set when it
+    // emits its first update; otherwise listeners would see busy === false at the start.
+    this.running = Promise.resolve()
+      .then(() => this.pipeline(state, abort.signal))
       .catch((e) => this.fail(state, e))
       .finally(() => {
         this.running = null;
-        this.abort = null;
+        if (this.abort === abort) this.abort = null;
+        // The pipeline's final update ("done" / "failed") fired while it was still
+        // running. Listeners such as the tray read `busy` on each update, so tell them
+        // it's idle now; without this the tray stays on "syncing" forever.
+        this.emit('update', this.status);
       });
     if (resumed) this.setStatus({ resumed: true });
     return this.running;

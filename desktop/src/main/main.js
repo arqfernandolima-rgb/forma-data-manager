@@ -18,6 +18,7 @@ const { SyncManager } = require('./sync');
 const { Scheduler } = require('./scheduler');
 const claudeConfig = require('./claude-config');
 const skill = require('./skill');
+const { trayState, TRAY_STATES } = require('./tray-state');
 
 const APP_ID = 'io.github.arqfernandolima.formadatamanager';
 const REPO_URL = 'https://github.com/arqfernandolima-rgb/acc-data-mcp-server';
@@ -132,31 +133,67 @@ function showWindow() {
   win.focus();
 }
 
+// One colored icon per tray state (see tray-state.js); falls back to the plain icon.
+let trayImages = null;
+function trayImage(key) {
+  if (!trayImages) {
+    const plain = nativeImage.createFromPath(iconPath('tray.png'));
+    trayImages = {};
+    for (const k of TRAY_STATES) {
+      const img = nativeImage.createFromPath(iconPath(`tray-${k}.png`));
+      trayImages[k] = img.isEmpty() ? plain : img;
+    }
+  }
+  return trayImages[key] || nativeImage.createEmpty();
+}
+
+function currentTrayState() {
+  // While syncing, skip the disk reads: progress updates arrive several times a second.
+  if (ctx.sync.busy) return trayState({ busy: true, phase: ctx.sync.status.phase });
+  const s = ctx.store.settings();
+  return trayState({
+    busy: false,
+    wizardComplete: !!s.wizardComplete,
+    signedIn: ctx.auth.signedIn,
+    database: readPointer(s.dataDir || defaultDataDir()),
+    lastSync: ctx.store.history()[0],
+    pendingReview: ctx.store.syncState()?.phase === 'rejected',
+  });
+}
+
+let lastTrayKey = null;
+function refreshTray() {
+  if (!tray || tray.isDestroyed()) return;
+  const st = currentTrayState();
+  const wizardComplete = !!ctx.store.settings().wizardComplete;
+  // Only touch the icon and menu when something visible changed.
+  const key = `${st.key}|${st.label}|${wizardComplete}`;
+  if (key === lastTrayKey) return;
+  lastTrayKey = key;
+  const busy = st.key === 'syncing';
+  tray.setImage(trayImage(st.key));
+  tray.setToolTip(`Forma Data Manager\n${st.label}`);
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: st.label, icon: trayImage(st.key).resize({ width: 16, height: 16 }), click: showWindow },
+      { type: 'separator' },
+      { label: 'Open Forma Data Manager', click: showWindow },
+      { label: busy ? 'Sync in progress…' : 'Sync now', enabled: !busy && wizardComplete, click: () => startSync('manual').catch(() => {}) },
+      { type: 'separator' },
+      { label: 'Open data folder', click: () => shell.openPath(ctx.store.settings().dataDir || defaultDataDir()) },
+      { label: 'Open log folder', click: () => shell.openPath(ctx.log.dir) },
+      { type: 'separator' },
+      { label: 'Quit', click: () => ((quitting = true), app.quit()) },
+    ])
+  );
+}
+
 function createTray() {
-  const img = nativeImage.createFromPath(iconPath('tray.png'));
-  tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img);
+  tray = new Tray(trayImage('notready'));
   tray.setToolTip('Forma Data Manager');
-  let lastKey = null;
-  const rebuild = () => {
-    // Progress updates arrive several times a second; only rebuild the menu when it would change.
-    const key = `${ctx.sync.busy}|${ctx.store.settings().wizardComplete}`;
-    if (key === lastKey) return;
-    lastKey = key;
-    tray.setToolTip(ctx.sync.busy ? 'Forma Data Manager: syncing…' : 'Forma Data Manager');
-    tray.setContextMenu(
-      Menu.buildFromTemplate([
-        { label: 'Open Forma Data Manager', click: showWindow },
-        { label: ctx.sync.busy ? 'Sync in progress…' : 'Sync now', enabled: !ctx.sync.busy && ctx.store.settings().wizardComplete, click: () => startSync('manual') },
-        { type: 'separator' },
-        { label: 'Open data folder', click: () => shell.openPath(ctx.store.settings().dataDir || defaultDataDir()) },
-        { label: 'Open log folder', click: () => shell.openPath(ctx.log.dir) },
-        { type: 'separator' },
-        { label: 'Quit', click: () => ((quitting = true), app.quit()) },
-      ])
-    );
-  };
-  rebuild();
-  ctx.sync.on('update', rebuild);
+  refreshTray();
+  // Data ages into "stale" and sign-ins can expire without any event, so re-check every minute.
+  setInterval(refreshTray, 60_000);
   tray.on('click', showWindow);
 }
 
@@ -232,10 +269,13 @@ function publicState() {
   };
 }
 
-// Throttled: download/build progress can fire several times a second.
+// Called on every sync update and after any action that changes what the app shows.
+// The tray updates right away (cheap, keyed); the window push is throttled because
+// download/build progress can fire several times a second.
 let pushTimer = null;
 let lastPush = 0;
 function pushState() {
+  refreshTray();
   const send = () => {
     pushTimer = null;
     lastPush = Date.now();
