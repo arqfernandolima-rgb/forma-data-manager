@@ -23,6 +23,9 @@ Start with the **History** page and the log (`%APPDATA%\Forma Data Manager\logs\
 | Scheduled sync didn't run | The app must be running (tray). Check **Start with Windows** in Settings. It catches up as soon as it runs (for example when the PC wakes up). With **Autodesk prepares it**, the extract is made at your time even if the PC was asleep, and the app collects it on wake |
 | Schedule card or Settings says "Autodesk schedule unavailable" | The app couldn't create or check its daily Data Connector request (the message says why; usually permissions: you need Executive Overview on the hub). It syncs from this computer meanwhile and retries every hour and at every start. "Autodesk API error 400: Invalid characters" was a bug in 4.1.0: update to the latest version. Or choose **This computer starts it** in Settings |
 | A "Forma Data Manager daily extraction - managed by the app" request in Data Connector | That's the app's daily schedule. Leave it: the app maintains it. To remove it, choose **This computer starts it** in Settings |
+| "Engine exited with code null" (4.1.2 and earlier) | The PC slept while the database was being built, and on waking the build's 2-hour limit (counted on the wall clock) stopped it. Fixed in 4.1.3: the limit counts only awake time. The previous data stayed in use |
+| `net::ERR_NETWORK_IO_SUSPENDED` or `net::ERR_NAME_NOT_RESOLVED` | The PC had just woken up and Wi-Fi/VPN wasn't back yet. From 4.1.3 the app waits for the connection, retries calls for a few minutes, and tries a failed scheduled sync again 10, 30 and 60 minutes later |
+| History shows a long duration (hours) for a quick sync | 4.1.2 and earlier counted time the PC was asleep. From 4.1.3 the duration is awake time and the sleep is shown underneath |
 | Not enough disk space | Each sync needs room for the download plus two database versions. Lower "versions to keep" to 1, or move the data folder |
 
 ## Claude

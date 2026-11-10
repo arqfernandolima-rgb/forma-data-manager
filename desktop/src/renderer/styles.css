@@ -181,7 +181,8 @@ details.card > summary { cursor: pointer; }
 .hist-toggle:hover { color: var(--accent); }
 .hist-toggle .chev { display: inline-block; width: 14px; color: var(--muted); }
 table.history > tr.open > td { border-bottom-color: transparent; }
-table.history > tr > td:last-child { min-width: 200px; }
+table.history > tr > td:last-child { min-width: 160px; }
+table.history .nowrap { white-space: nowrap; }
 .table-scroll { overflow-x: auto; }
 tr.detail > td { padding: 4px 8px 14px 22px; }
 .change-detail { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }

@@ -20,6 +20,7 @@ const { CloudSchedule } = require('./cloud-schedule');
 const claudeConfig = require('./claude-config');
 const skill = require('./skill');
 const { trayState, TRAY_STATES } = require('./tray-state');
+const { SleepTracker } = require('./power');
 
 const APP_ID = 'io.github.arqfernandolima.formadatamanager';
 const REPO_URL = 'https://github.com/arqfernandolima-rgb/forma-data-manager';
@@ -80,7 +81,13 @@ function makeContext() {
   const aps = new ApsClient({ auth, fetch: fetchImpl, log });
   const dc = new DataConnector({ aps, fetch: fetchImpl, log });
   const where = { isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, appRoot: ROOT };
-  const engine = new Engine(engineCommand(where), log);
+  // Notices when the PC slept, so build limits and durations count awake time only.
+  const sleep = new SleepTracker().start();
+  sleep.onGap = (from, to) => {
+    const min = Math.round((to - from) / 60_000);
+    if (min >= 5) log.info(`The app was paused for ${min >= 120 ? `${Math.round(min / 6) / 10} h` : `${min} min`} (PC asleep) until now`);
+  };
+  const engine = new Engine(engineCommand(where), log, { sleep });
   // Scheduled syncs always notify. Manual ones only when you're not looking at the window,
   // since an extract can take an hour and you were told you could walk away.
   const notify = (title, body, { trigger } = {}) => {
@@ -91,10 +98,11 @@ function makeContext() {
     n.on('click', showWindow);
     n.show();
   };
-  const sync = new SyncManager({ store, auth, dc, engine, log, notify });
+  const sync = new SyncManager({ store, auth, dc, engine, log, notify, sleepTracker: sleep });
   const cloud = new CloudSchedule({ store, dc, auth, log });
-  const scheduler = new Scheduler({ store, sync, auth, log, cloud, dc });
-  return { store, log, auth, aps, dc, engine, sync, cloud, scheduler, skillDir: skill.skillSourceDir(where) };
+  // net.isOnline() turns false while Windows has no connection (for example right after waking).
+  const scheduler = new Scheduler({ store, sync, auth, log, cloud, dc, isOnline: () => net.isOnline() });
+  return { store, log, auth, aps, dc, engine, sync, cloud, scheduler, sleep, skillDir: skill.skillSourceDir(where) };
 }
 
 function iconPath(name) {
@@ -300,6 +308,7 @@ function publicState() {
     history: ctx.store.history().slice(0, 20),
     database: readPointer(dataDir),
     nextRun: ctx.scheduler.nextRun()?.toISOString() ?? null,
+    retryAt: ctx.scheduler.pendingRetry()?.toISOString() ?? null,
     cloud: ctx.cloud.status(),
     jobsLast24h: ctx.sync.jobsLast24h(),
     engineExe: exe,
@@ -491,7 +500,12 @@ app.whenReady().then(() => {
   ctx.sync.on('update', () => pushState());
   ctx.sync.resume();
   ctx.scheduler.start();
-  powerMonitor.on('resume', () => setTimeout(() => ctx.scheduler.check(), 30_000));
+  // After waking, give Wi-Fi/VPN a minute before the scheduler looks (it also waits while offline).
+  powerMonitor.on('suspend', () => ctx.log.info('PC going to sleep'));
+  powerMonitor.on('resume', () => {
+    ctx.log.info('PC woke up');
+    setTimeout(() => ctx.scheduler.check(), 60_000);
+  });
   applyLoginItem(); // also re-points the "start with Windows" entry if the app moved
   repairClaudeRegistration('start-up');
 });

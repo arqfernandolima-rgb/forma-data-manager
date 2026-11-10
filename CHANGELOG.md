@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.1.3 (2026-11)
+
+### Forma Data Manager (Windows app)
+Fixes for laptops that sleep during a sync, found in a real log from Nov 7–10:
+- Fixed: "Engine exited with code null". The database build has a 2-hour safety limit, and it counted time the PC was asleep, so a build paused by sleep was stopped the moment the PC woke up. The limit now counts only awake time, and if it ever does stop a build, the message says why.
+- Fixed: the first sync after waking failed in a fraction of a second with `net::ERR_NETWORK_IO_SUSPENDED` or `net::ERR_NAME_NOT_RESOLVED`, because the sign-in refresh wasn't retried. Calls to Autodesk, including the sign-in refresh, now keep trying for about four minutes when there's no connection. The scheduler waits a minute after waking and doesn't start while Windows reports no connection.
+- A failed scheduled sync is tried again the same day, 10, 30 and 60 minutes later (at most 3 retries). With Autodesk preparing the extract, a retry collects the same extract again and doesn't use another job. The Status page shows *retrying* and when.
+- If the app can't reach Autodesk to look for today's extract, it looks again a few minutes later instead of starting its own extraction, which failed the same way and used up a job.
+- Losing the connection while Autodesk prepares the extract no longer fails the sync, and dropped downloads get longer waits between attempts.
+- A lost connection during the twice-daily check of Autodesk's schedule is no longer shown as "Autodesk schedule unavailable" for 12 hours. The app checks again in 10 minutes.
+- History durations leave out time the PC was asleep and show it underneath ("asleep: 1 h 52 min").
+- The log notes when the PC goes to sleep and wakes up.
+- A network error that happens to contain "revoked" or "expired" (for example `net::ERR_CERT_REVOKED`) can no longer sign you out. Only Autodesk's own answer can.
+
 ## 4.1.2 (2026-11)
 
 ### Forma Data Manager (Windows app)

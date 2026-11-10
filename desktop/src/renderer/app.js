@@ -52,6 +52,7 @@ async function call(fn, ...args) {
 }
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '—');
 /** Compact date for tables: the year only when it isn't this year. */
 const fmtShort = (iso) => {
   if (!iso) return '—';
@@ -658,7 +659,7 @@ function renderStatus() {
   const info = h(
     'div',
     { class: 'grid' },
-    h('div', { class: 'card' }, h('h2', {}, 'Schedule'), h('p', {}, S.settings.schedule.enabled ? `Every day at ${S.settings.schedule.time}` : 'Automatic sync is off'), scheduleSource(), S.cloud?.mode === 'local' || !S.cloud?.active ? h('p', { class: 'muted small' }, S.nextRun ? `Next run: ${fmtDate(S.nextRun)}` : '') : null, h('p', { class: 'muted small' }, `${S.jobsLast24h} of 24 Data Connector jobs used by this app in the last 24 hours`)),
+    h('div', { class: 'card' }, h('h2', {}, 'Schedule'), h('p', {}, S.settings.schedule.enabled ? `Every day at ${S.settings.schedule.time}` : 'Automatic sync is off'), scheduleSource(), S.retryAt ? h('p', { class: 'small' }, badge('retrying', 'warn'), ' ', h('span', { class: 'muted', text: `Today’s scheduled sync failed; trying again at ${fmtTime(S.retryAt)}.` })) : S.cloud?.mode === 'local' || !S.cloud?.active ? h('p', { class: 'muted small' }, S.nextRun ? `Next run: ${fmtDate(S.nextRun)}` : '') : null, h('p', { class: 'muted small' }, `${S.jobsLast24h} of 24 Data Connector jobs used by this app in the last 24 hours`)),
     h('div', { class: 'card' }, h('h2', {}, 'Claude Desktop'), claudeOk ? badge('Connected', 'ok') : claudeOutdated ? badge('Needs update', 'warn') : badge('Not set up', 'info'), h('p', { class: 'muted small' }, claudeOk ? 'Ask Claude about your projects. Restart Claude Desktop after changing settings here.' : 'Connect it so Claude can query the database.'), h('div', { class: 'row' }, btn('Claude setup', () => ((page = 'claude'), render())))),
     h('div', { class: 'card' }, h('h2', {}, 'Hub'), h('p', { text: S.settings.hub?.name || '—' }), h('p', { class: 'muted small mono', text: S.settings.hub?.accountId || '' }), !S.signedIn ? btn('Sign in', async () => (await call(fdm.signIn), refresh()), 'primary') : null)
   );
@@ -708,7 +709,13 @@ function renderHistory() {
       h('td', { class: 'nowrap', title: fmtDate(r.startedAt) }, fmtShort(r.startedAt), h('div', { class: 'small muted', text: r.source === 'autodesk' ? 'scheduled by Autodesk' : r.trigger || '' })),
       h('td', {}, badge(r.status, kinds[r.status] || 'info')),
       h('td', { class: 'nowrap' }, r.asOf || '—', r.rows != null ? h('div', { class: 'small muted', text: `${fmtNum(r.rows)} rows${r.sizeBytes ? ` · ${fmtBytes(r.sizeBytes)}` : ''}` }) : null),
-      h('td', {}, r.minutes != null ? fmtMinutes(r.minutes) : '—', r.prepareMinutes != null ? h('div', { class: 'small muted', text: `+ ${fmtMinutes(r.prepareMinutes)} at Autodesk` }) : null),
+      h(
+        'td',
+        {},
+        r.minutes != null ? fmtMinutes(r.minutes) : '—',
+        r.prepareMinutes != null ? h('div', { class: 'small muted nowrap', text: `Autodesk: ${fmtMinutes(r.prepareMinutes)}`, title: 'Time Autodesk took to prepare the extract on its servers.' }) : null,
+        r.pausedMinutes >= 5 ? h('div', { class: 'small muted nowrap', text: `asleep: ${fmtMinutes(r.pausedMinutes)}`, title: 'Time the PC was asleep (or the app was closed) during this sync. Not counted in the duration.' }) : null
+      ),
       h('td', {}, summary, r.status === 'success' && problems ? h('div', { class: 'small muted', text: problems }) : null)
     );
     return open ? [main, h('tr', { class: 'detail' }, h('td', { colspan: cols.length }, changeDetail(r.changes)))] : main;

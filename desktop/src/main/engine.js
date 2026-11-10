@@ -6,6 +6,10 @@
 const cp = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const { WALL_CLOCK } = require('./power');
+
+const BUILD_LIMIT_MS = 2 * 60 * 60_000; // a build takes minutes; this only stops a stuck one
+const fmtHours = (ms) => `${Math.round((ms / 3_600_000) * 10) / 10} hours`;
 
 function engineCommand({ isPackaged, resourcesPath, appRoot }) {
   if (isPackaged) {
@@ -18,24 +22,42 @@ function engineCommand({ isPackaged, resourcesPath, appRoot }) {
 }
 
 class Engine {
-  constructor(cmd, log) {
+  constructor(cmd, log, { sleep = WALL_CLOCK, now = () => Date.now(), watchMs = 30_000 } = {}) {
     this.cmd = cmd;
     this.log = log;
     this.current = null;
+    this.sleepTracker = sleep; // so time the PC spends asleep doesn't count against the limit
+    this.now = now;
+    this.watchMs = watchMs;
   }
 
   get exePath() {
     return this.cmd.exePath;
   }
 
-  run(args, { onEvent, timeoutMs = 2 * 60 * 60_000 } = {}) {
+  run(args, { onEvent, timeoutMs = BUILD_LIMIT_MS } = {}) {
     return new Promise((resolve, reject) => {
       const child = cp.spawn(this.cmd.command, [...this.cmd.prefix, ...args], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
       this.current = child;
       let buf = '';
       let stderr = '';
       let last = null;
-      const timer = setTimeout(() => child.kill(), timeoutMs);
+      // Count only time the PC is awake: a build paused by sleep (it was at 4:25 AM on Nov 8, 2026)
+      // must not be killed the moment the PC wakes because the wall clock passed the limit.
+      const started = this.now();
+      let timedOut = false;
+      let stopped = false;
+      const timer = setInterval(() => {
+        if (this.sleepTracker.awakeBetween(started, this.now()) > timeoutMs) {
+          timedOut = true;
+          child.kill();
+        }
+      }, this.watchMs);
+      timer.unref?.();
+      child.stopByUser = () => {
+        stopped = true;
+        child.kill();
+      };
       child.stdout.on('data', (d) => {
         buf += d.toString();
         let i;
@@ -57,16 +79,21 @@ class Engine {
         if (stderr.length > 20000) stderr = stderr.slice(-20000);
       });
       child.on('error', (e) => {
-        clearTimeout(timer);
+        clearInterval(timer);
         this.current = null;
         reject(new Error(`Could not start the engine (${this.cmd.command}): ${e.message}`));
       });
-      child.on('exit', (code) => {
-        clearTimeout(timer);
+      child.on('exit', (code, signal) => {
+        clearInterval(timer);
         this.current = null;
         if (code === 0) resolve(last);
         else {
-          const err = new Error(last?.event === 'error' ? last.message : stderr.trim().split('\n').slice(-3).join(' ') || `Engine exited with code ${code}`);
+          let fallback = `The database build stopped with exit code ${code}.`;
+          if (timedOut) fallback = `The database build was still running after ${fmtHours(timeoutMs)} (not counting time the PC was asleep), so it was stopped. The previous data is still in use.`;
+          else if (stopped) fallback = 'The database build was stopped.';
+          else if (code === null) fallback = `The database build was stopped before it finished${signal ? ` (${signal})` : ''}. The previous data is still in use.`;
+          const err = new Error(timedOut ? fallback : last?.event === 'error' ? last.message : stderr.trim().split('\n').slice(-3).join(' ') || fallback);
+          err.timedOut = timedOut;
           err.rejected = !!last?.rejected;
           reject(err);
         }
@@ -102,7 +129,8 @@ class Engine {
 
   cancel() {
     try {
-      this.current?.kill();
+      if (this.current?.stopByUser) this.current.stopByUser();
+      else this.current?.kill();
     } catch {}
   }
 }

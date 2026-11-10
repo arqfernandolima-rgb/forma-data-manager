@@ -16,6 +16,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
+const { isNetworkError } = require('./power');
 
 const base = (accountId) => `/data-connector/v1/accounts/${encodeURIComponent(accountId)}`;
 
@@ -28,10 +29,11 @@ function safeDescription(text) {
 }
 
 class DataConnector {
-  constructor({ aps, fetch, log }) {
+  constructor({ aps, fetch, log, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
     this.aps = aps;
     this.fetch = fetch; // used for signed-URL downloads (no auth header)
     this.log = log;
+    this.wait = wait;
   }
 
   /** One-time extraction of every service group, starting now. */
@@ -105,8 +107,10 @@ class DataConnector {
   async download(accountId, jobId, name, dest, { expectedSize, onProgress, signal } = {}) {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     const tmp = `${dest}.part`;
-    let lastErr;
-    for (let attempt = 1; attempt <= 4; attempt++) {
+    // Each attempt gets a fresh signed URL. A dropped connection (the PC went to sleep mid-download)
+    // gets more and longer waits than a bad response, so the network has time to come back.
+    const NETWORK_WAITS_S = [5, 15, 30, 60, 120];
+    for (let attempt = 1; ; attempt++) {
       try {
         const url = await this.signedUrl(accountId, jobId, name);
         const res = await this.fetch(url, { signal });
@@ -129,16 +133,17 @@ class DataConnector {
         onProgress?.({ done: size, total: size });
         return { path: dest, size };
       } catch (e) {
-        lastErr = e;
         if (signal?.aborted) throw e;
-        this.log?.warn(`Download attempt ${attempt} for ${name} failed: ${e.message}`);
+        const offline = isNetworkError(e);
+        const max = offline ? NETWORK_WAITS_S.length + 1 : 4;
+        this.log?.warn(`Download attempt ${attempt} of ${max} for ${name} failed: ${e.message}`);
         try {
           fs.unlinkSync(tmp);
         } catch {}
-        await new Promise((r) => setTimeout(r, 2000 * attempt));
+        if (attempt >= max) throw e;
+        await this.wait(offline ? NETWORK_WAITS_S[attempt - 1] * 1000 : 2000 * attempt);
       }
     }
-    throw lastErr;
   }
 }
 

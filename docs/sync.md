@@ -31,6 +31,7 @@ Every day after your scheduled time, the app looks for that day's run:
 - **Finished or still running**: the app collects it (waits for it if needed), downloads and builds. History shows it as *scheduled by Autodesk*.
 - **Failed**: the app starts a one-time extraction itself right away.
 - **Not there 45 minutes after the time**: the app starts a one-time extraction itself and remembers the miss; two misses in a row count as "paused" (see above).
+- **Can't reach Autodesk** (no connection yet after waking up): the app looks again a few minutes later. It doesn't start an extraction of its own, which would fail the same way and use up a job.
 - **Can't be set up** (for example, missing permissions): the Schedule card and Settings say so, the app syncs from this computer meanwhile and retries every hour (and right away when the app starts, so an upgrade that fixes the problem takes effect at once).
 
 ## Phases
@@ -60,9 +61,10 @@ The in-flight state is saved after every step (`%APPDATA%\Forma Data Manager\syn
 
 ## Schedule rules
 
-- The app checks every minute, and right after start-up or waking from sleep.
+- The app checks every minute, after start-up, and a minute after the PC wakes from sleep. While Windows reports no connection it waits.
 - If today's scheduled time has passed and today's run hasn't happened yet, it runs now (catch-up). With **Autodesk prepares it**, "runs now" means collecting the extract Autodesk already made at your time.
 - It runs every day even if you also clicked **Sync now**; manual syncs don't replace the scheduled one.
+- **If today's scheduled sync fails, it's tried again** 10, 30 and 60 minutes later (at most 3 retries a day). The Status page shows *retrying* and the time. With **Autodesk prepares it**, a retry collects the same Autodesk extract again, so it doesn't use another job. A sync that was cancelled, or held for review, isn't retried.
 - The schedule needs the app to be running. By default it starts with Windows and stays in the tray. Closing the window keeps it running; use the tray menu → Quit to stop it.
 - While the app runs, the Autodesk sign-in is refreshed regularly, even with the schedule off, so it doesn't expire after ~15 idle days.
 
@@ -72,7 +74,7 @@ Autodesk allows **24 Data Connector jobs per rolling 24 hours, per hub and per u
 
 - shows how many jobs **it** started in the last 24 hours (including Autodesk's daily run of its schedule),
 - warns at 20 and refuses to start a 25th,
-- never retries a rejected request automatically.
+- never retries a request Autodesk rejected (429) automatically; retries of a failed scheduled sync (above) are capped at 3 a day.
 
 ## Safety checks before new data goes live
 
@@ -107,7 +109,17 @@ Older versions are deleted after a successful build. A file that a running serve
 
 Each sync creates one one-time request in your hub's Data Connector. After a successful sync, the app deletes the **older requests it created itself**. It keeps the IDs of its own requests and never touches requests created by people or other tools.
 
+## Sleep and lost connections
+
+Laptops sleep in the middle of syncs. From 4.1.3 the app expects it:
+
+- While waiting for Autodesk, a lost connection doesn't fail the sync; it keeps checking (Autodesk keeps working either way).
+- Calls to Autodesk, including the sign-in refresh, are retried for about four minutes when there's no connection. Downloads that drop are retried with longer waits (5 s up to 2 min).
+- The build's 2-hour safety limit counts only time the PC is awake, so a build paused by sleep finishes when the PC wakes.
+- Durations in History leave out the time the PC was asleep, and show it separately ("asleep: 1 h 52 min").
+- The log notes when the PC went to sleep and woke up, which makes gaps easy to read.
+
 ## Logs and history
 
-- **History** page: the last 50 runs with result, data date, rows, duration and what changed.
+- **History** page: the last 50 runs with result, data date, rows, duration (awake time; Autodesk's preparation and any sleep shown underneath) and what changed.
 - Log file: `%APPDATA%\Forma Data Manager\logs\forma-data-manager.log`. Tokens and signed-URL credentials are redacted.

@@ -11,18 +11,21 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { jobOutcome } = require('./dataconnector');
 const { changeHeadline } = require('../renderer/changes');
+const { WALL_CLOCK, isNetworkError } = require('./power');
 
 const DAY = 24 * 60 * 60_000;
 const JOB_LIMIT = 24; // Data Connector: per hub and per user, rolling 24h
 const JOB_WARN = 20;
 const WAIT_FOR_JOB_MS = 45 * 60_000; // job should appear quickly after the request
 const WAIT_FOR_RESULT_MS = 10 * 60 * 60_000; // large hubs can take hours
+const MAX_OFFLINE_POLLS = 6; // while waiting: give up after this many checks in a row with no connection (each retries for minutes)
 
 class SyncCancelled extends Error {}
 
 class SyncManager extends EventEmitter {
-  constructor({ store, auth, dc, engine, log, notify = () => {}, sleep, now = () => Date.now() }) {
+  constructor({ store, auth, dc, engine, log, notify = () => {}, sleep, now = () => Date.now(), sleepTracker = WALL_CLOCK }) {
     super();
+    this.sleepTracker = sleepTracker; // durations count time the PC was awake
     this.store = store;
     this.auth = auth;
     this.dc = dc;
@@ -116,6 +119,9 @@ class SyncManager extends EventEmitter {
   }
 
   launch(state, { resumed = false } = {}) {
+    // Awake time spent before an app restart is kept in the saved state.
+    state.awakeBase = state.awakeMs || 0;
+    state.launchedAt = this.now();
     const abort = new AbortController();
     this.abort = abort;
     // Start the pipeline on the next microtask so `running` is already set when it
@@ -152,8 +158,15 @@ class SyncManager extends EventEmitter {
    */
   mark(state, patch) {
     state.timeline = { ...(state.timeline || {}), ...patch };
+    state.awakeMs = this.awakeSoFar(state);
     this.save(state);
     this.setStatus({ timeline: state.timeline });
+  }
+
+  /** Time this sync has run while the PC was awake (not counting sleep). */
+  awakeSoFar(state) {
+    const from = state.launchedAt ?? (Date.parse(state.startedAt) || this.now());
+    return (state.awakeBase || 0) + this.sleepTracker.awakeBetween(from, this.now());
   }
 
   /** How long Autodesk took to prepare recent extracts, and how big they were (from history). */
@@ -192,40 +205,50 @@ class SyncManager extends EventEmitter {
     if (state.phase === 'waiting') {
       const waitStart = this.now();
       let polls = 0;
+      let offlinePolls = 0;
       let finishedAt = null;
       for (;;) {
         if (signal.aborted) throw new SyncCancelled('Sync cancelled.');
-        if (!state.jobId) {
-          const jobs = await this.dc.requestJobs(state.accountId, state.requestId);
-          const job = jobs.sort((a, b) => String(b.createdAt || b.startedAt || '').localeCompare(String(a.createdAt || a.startedAt || '')))[0];
-          if (job?.id) {
-            state.jobId = job.id;
-            this.mark(state, { confirmedAt: iso(), jobId: job.id });
-            this.log.info(`Job ${job.id} created (status ${job.status})`);
-          } else if (this.now() - waitStart > WAIT_FOR_JOB_MS) {
-            throw new Error('Data Connector accepted the request but no job started within 45 minutes. Check Data Connector in Forma, then try again.');
-          }
-        }
         let jobStatus = null;
-        if (state.jobId) {
-          const job = await this.dc.getJob(state.accountId, state.jobId);
-          const outcome = jobOutcome(job);
-          jobStatus = job?.status ?? null;
-          if (outcome === 'success') {
-            // A job Autodesk finished hours ago (PC was asleep) should show when it really finished.
-            const done = Date.parse(job?.completedAt || '');
-            const asked = Date.parse(state.timeline?.confirmedAt || state.timeline?.requestedAt || '') || 0;
-            finishedAt = Number.isFinite(done) && done >= asked && done <= this.now() ? new Date(done).toISOString() : null;
-            break;
+        let offline = false;
+        try {
+          if (!state.jobId) {
+            const jobs = await this.dc.requestJobs(state.accountId, state.requestId);
+            const job = jobs.sort((a, b) => String(b.createdAt || b.startedAt || '').localeCompare(String(a.createdAt || a.startedAt || '')))[0];
+            if (job?.id) {
+              state.jobId = job.id;
+              this.mark(state, { confirmedAt: iso(), jobId: job.id });
+              this.log.info(`Job ${job.id} created (status ${job.status})`);
+            } else if (this.now() - waitStart > WAIT_FOR_JOB_MS) {
+              throw new Error('Data Connector accepted the request but no job started within 45 minutes. Check Data Connector in Forma, then try again.');
+            }
           }
-          if (outcome === 'failed') throw new Error(`The Data Connector job ended with status "${job?.status}"${job?.completionStatus ? ` / "${job.completionStatus}"` : ''}. Check Data Connector in Forma for details.`);
-          if (this.now() - waitStart > WAIT_FOR_RESULT_MS) throw new Error('The Data Connector job is still running after 10 hours. It may finish later; run Sync now again to pick it up.');
+          if (state.jobId) {
+            const job = await this.dc.getJob(state.accountId, state.jobId);
+            const outcome = jobOutcome(job);
+            jobStatus = job?.status ?? null;
+            if (outcome === 'success') {
+              // A job Autodesk finished hours ago (PC was asleep) should show when it really finished.
+              const done = Date.parse(job?.completedAt || '');
+              const asked = Date.parse(state.timeline?.confirmedAt || state.timeline?.requestedAt || '') || 0;
+              finishedAt = Number.isFinite(done) && done >= asked && done <= this.now() ? new Date(done).toISOString() : null;
+              break;
+            }
+            if (outcome === 'failed') throw new Error(`The Data Connector job ended with status "${job?.status}"${job?.completionStatus ? ` / "${job.completionStatus}"` : ''}. Check Data Connector in Forma for details.`);
+            if (this.now() - waitStart > WAIT_FOR_RESULT_MS) throw new Error('The Data Connector job is still running after 10 hours. It may finish later; run Sync now again to pick it up.');
+          }
+          offlinePolls = 0;
+        } catch (e) {
+          // Lost the connection (PC slept, Wi-Fi/VPN dropped): Autodesk keeps working, so keep waiting.
+          if (!isNetworkError(e) || ++offlinePolls > MAX_OFFLINE_POLLS) throw e;
+          offline = true;
+          this.log.warn(`No connection while waiting for Autodesk (${e.message}); will keep checking.`);
         }
         polls++;
         const waitMs = polls < 10 ? 20_000 : 60_000;
         this.setStatus({
           phase: 'waiting',
-          message: null,
+          message: offline ? 'No connection to Autodesk right now; will keep checking.' : null,
           job: { id: state.jobId, status: jobStatus },
           lastCheckAt: iso(),
           nextCheckAt: new Date(this.now() + waitMs).toISOString(),
@@ -295,17 +318,23 @@ class SyncManager extends EventEmitter {
     // 5. Done
     const finished = this.now();
     const tl = state.timeline || {};
-    const minutesBetween = (a, b) => (a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 6000) / 10 : null);
+    const toMin = (ms) => Math.round(ms / 6000) / 10;
+    const minutesBetween = (a, b) => (a && b ? toMin(Date.parse(b) - Date.parse(a)) : null);
+    // Download and build happen on this PC: don't count time it spent asleep.
+    const awakeBetween = (a, b) => (a && b ? toMin(this.sleepTracker.awakeBetween(Date.parse(a), Date.parse(b))) : null);
+    const awake = this.awakeSoFar(state);
+    const paused = Math.max(0, finished - t0 - awake);
     const entry = {
       status: 'success',
       trigger: state.trigger,
       source: state.source || 'app', // 'autodesk' = Autodesk's daily schedule ran the extraction
       startedAt: state.startedAt,
       finishedAt: new Date(finished).toISOString(),
-      minutes: Math.round((finished - t0) / 6000) / 10,
-      prepareMinutes: minutesBetween(tl.requestedAt || state.startedAt, tl.preparedAt),
-      downloadMinutes: minutesBetween(tl.downloadStartedAt, tl.downloadedAt),
-      buildMinutes: minutesBetween(tl.buildStartedAt, new Date(finished).toISOString()),
+      minutes: toMin(awake),
+      pausedMinutes: paused >= 60_000 ? toMin(paused) : 0, // PC asleep (or the app closed) during the sync
+      prepareMinutes: minutesBetween(tl.requestedAt || state.startedAt, tl.preparedAt), // at Autodesk: real time
+      downloadMinutes: awakeBetween(tl.downloadStartedAt, tl.downloadedAt),
+      buildMinutes: awakeBetween(tl.buildStartedAt, new Date(finished).toISOString()),
       sizeBytes: tl.downloadBytes ?? null,
       jobId: state.jobId,
       requestId: state.requestId,
@@ -322,7 +351,7 @@ class SyncManager extends EventEmitter {
     this.store.setSyncState(null);
     this.removeDownload(state);
     this.setStatus({ phase: 'done', message: `Data as of ${result?.as_of}, ${Number(result?.rows || 0).toLocaleString()} rows.`, progress: 1, timeline: { ...tl, doneAt: entry.finishedAt }, lastResult: entry, download: null, build: null });
-    this.log.info(`Sync complete: as_of ${result?.as_of}, ${result?.rows} rows, ${entry.minutes} min (Autodesk ${entry.prepareMinutes} min)`);
+    this.log.info(`Sync complete: as_of ${result?.as_of}, ${result?.rows} rows, ${entry.minutes} min (Autodesk ${entry.prepareMinutes} min${entry.pausedMinutes ? `; paused ${entry.pausedMinutes} min while the PC slept` : ''})`);
     const headline = changeHeadline(entry.changes);
     this.notify('Forma data updated', `Data as of ${result?.as_of}. Took ${fmtDuration(entry.minutes)}.${headline ? ` ${headline}` : ''}`, { trigger: state.trigger });
     this.cleanupRequests(state.requestId).catch((e) => this.log.warn(`Request cleanup: ${e.message}`));

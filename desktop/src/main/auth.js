@@ -31,6 +31,7 @@ function redirectUri(port) {
 class AuthError extends Error {
   constructor(message, code) {
     super(message);
+    this.name = 'AuthError';
     this.code = code;
   }
 }
@@ -195,7 +196,8 @@ class Auth {
           this.save(next);
           return next;
         } catch (e) {
-          if (/invalid_grant|expired|revoked/i.test(`${e.code} ${e.message}`)) {
+          // Only Autodesk's answer can end the sign-in; a network error (even net::ERR_CERT_REVOKED) can't.
+          if (e instanceof AuthError && /invalid_grant|expired|revoked/i.test(`${e.code} ${e.message}`)) {
             this.save(null);
             throw new AuthError('Your Autodesk sign-in expired. Sign in again.', 'signed_out');
           }

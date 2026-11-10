@@ -19,6 +19,7 @@
  * scheduler then simply starts extractions from this computer.
  */
 const { scheduledAt } = require('./scheduler');
+const { isNetworkError } = require('./power');
 
 const DAY = 86_400_000;
 const LIFETIME_DAYS = 365;
@@ -26,6 +27,7 @@ const FALLBACK_LIFETIME_DAYS = 90; // if Autodesk refuses an end date a year out
 const RENEW_WITHIN_DAYS = 30;
 const QUIET_TOO_LONG_MS = 36 * 3_600_000; // a daily request should have queued a job by then
 const MISSED_DAYS_PAUSED = 2; // Autodesk's run didn't show up this many days in a row
+const RECHECK_OFFLINE_MIN = 10; // couldn't reach Autodesk: look again this soon
 // Plain characters only: Data Connector answers "400 Invalid characters" to parentheses.
 const DESCRIPTION = 'Forma Data Manager daily extraction - managed by the app';
 
@@ -136,9 +138,16 @@ class CloudSchedule {
         }
       }
 
-      this.save({ checkedAt: iso(), nextExecAt: req.nextExecAt ?? cur.nextExecAt ?? null, effectiveTo, lastError: null });
+      this.save({ checkedAt: iso(), nextExecAt: req.nextExecAt ?? cur.nextExecAt ?? null, effectiveTo, lastError: null, recheckAfter: null });
       return this.status();
     } catch (e) {
+      if (isNetworkError(e)) {
+        // No connection (often right after waking up) says nothing about the schedule: keep what we
+        // knew, don't show an error, and look again in a few minutes instead of 12 hours.
+        this.log.warn(`Couldn't reach Autodesk to check the daily extraction (${e.message}); will check again in ${RECHECK_OFFLINE_MIN} minutes.`);
+        if (this.store.settings().cloudSchedule) this.save({ recheckAfter: new Date(this.now() + RECHECK_OFFLINE_MIN * 60_000).toISOString() });
+        return this.status();
+      }
       const detail = e.status === 400 && e.detail ? ` ${JSON.stringify(e.detail).slice(0, 400)}` : '';
       this.log.warn(`Autodesk daily extraction (${reason}): ${e.message}${detail}`);
       this.save({ checkedAt: iso(), lastError: e.message });

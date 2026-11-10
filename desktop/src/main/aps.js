@@ -5,7 +5,11 @@
  * Uses Electron's net.fetch in the app (Chromium network stack, so corporate
  * proxies and PAC files work); plain fetch in tests.
  */
+const { isNetworkError } = require('./power');
+
 const API = 'https://developer.api.autodesk.com';
+// No connection (just woke up, Wi-Fi/VPN reconnecting): keep trying for about four minutes.
+const NETWORK_WAITS_S = [2, 4, 8, 15, 30, 60, 60, 60];
 
 class ApsError extends Error {
   constructor(message, { status, code, detail } = {}) {
@@ -32,27 +36,40 @@ function friendly(status, body, url) {
 }
 
 class ApsClient {
-  constructor({ auth, fetch, log }) {
+  constructor({ auth, fetch, log, wait = sleep }) {
     this.auth = auth;
     this.fetch = fetch;
     this.log = log;
+    this.wait = wait;
   }
 
   async request(method, pathOrUrl, { body, retries = 4, headers = {} } = {}) {
     const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${API}${pathOrUrl}`;
     let attempt = 0;
+    let offline = 0;
     for (;;) {
-      const token = await this.auth.accessToken();
       let res;
       try {
+        // Inside the retry: after waking up, refreshing the sign-in token is usually the first call
+        // that meets the missing network (that's where the bare net::ERR_* errors came from).
+        const token = await this.auth.accessToken();
         res = await this.fetch(url, {
           method,
           headers: { authorization: `Bearer ${token}`, accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}), ...headers },
           body: body ? JSON.stringify(body) : undefined,
         });
       } catch (e) {
+        if (e.name === 'AuthError' || e.code === 'signed_out' || e.name === 'AbortError') throw e;
+        if (isNetworkError(e)) {
+          if (offline < NETWORK_WAITS_S.length) {
+            if (offline === 2) this.log?.warn(`No connection to Autodesk (${e.message}); still trying…`);
+            await this.wait(NETWORK_WAITS_S[offline++] * 1000);
+            continue;
+          }
+          throw new ApsError(`Couldn't reach Autodesk: no network connection (${e.message}).`, { code: 'network' });
+        }
         if (attempt++ < retries) {
-          await sleep(1000 * 2 ** attempt);
+          await this.wait(1000 * 2 ** attempt);
           continue;
         }
         throw new ApsError(`Network error talking to Autodesk: ${e.message}`, { code: 'network' });
@@ -67,7 +84,7 @@ class ApsClient {
       if ((res.status === 429 && !isDcCreate) || res.status >= 500) {
         if (attempt++ < retries) {
           const ra = Number(res.headers.get('retry-after'));
-          await sleep(Number.isFinite(ra) && ra > 0 ? Math.min(ra, 120) * 1000 : 1500 * 2 ** attempt);
+          await this.wait(Number.isFinite(ra) && ra > 0 ? Math.min(ra, 120) * 1000 : 1500 * 2 ** attempt);
           continue;
         }
       }

@@ -25,7 +25,7 @@ bun run compile:win                       # dist/forma-data.exe (cross-compiles 
 ```bash
 cd desktop
 npm install
-npm test                                  # 33 tests: PKCE sign-in via loopback, retries, sync pipeline incl. timeline/resume/limits/rejection, scheduler, Autodesk daily schedule upkeep, Claude config merge, tray state, skill ZIP
+npm test                                  # 43 tests: PKCE sign-in via loopback, retries, sync pipeline incl. timeline/resume/limits/rejection, scheduler incl. same-day retries, Autodesk daily schedule upkeep, sleep/lost-connection handling, Claude config merge, tray state, skill ZIP
 npm start                                 # dev mode: uses ../engine/dist/forma-data(.exe) if present, else `bun ../engine/src/cli.js`
 npm run dist                              # Windows installer in dist/ (needs ../engine/dist/forma-data.exe)
 ```
