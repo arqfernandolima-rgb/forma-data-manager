@@ -27,7 +27,7 @@ function friendly(status, body, url) {
   const dc = url.includes('/data-connector/');
   if (status === 401) return 'Autodesk rejected the sign-in token. Sign in again.';
   if (status === 403 && dc)
-    return `Data Connector refused the request (403). The signed-in user must be a hub (account) admin with Executive access, and the APS client ID must be added under Custom Integrations in this hub. ${raw}`.trim();
+    return `Data Connector refused the request (403). The signed-in user needs Executive Overview access to the hub (a hub admin grants it), and the APS client ID must be added under Custom Integrations in this hub. ${raw}`.trim();
   if (status === 403) return `Access denied (403). Check that your APS client ID is added under Custom Integrations in this hub. ${raw}`.trim();
   if (status === 404) return `Not found (404): ${raw || url}`;
   if (status === 429 && dc) return 'Data Connector limit reached: 24 extraction jobs per rolling 24 hours, per hub and per user (jobs started in the web UI count too). Try again later.';

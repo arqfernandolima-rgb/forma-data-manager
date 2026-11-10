@@ -80,7 +80,7 @@ Argument `request` (optional). Returns the same guide plus your request. In Clau
 ```powershell
 # Claude Desktop does this for you; useful for testing
 $env:FORMA_DATA_DIR = "$env:LOCALAPPDATA\FormaData"
-& "$env:LOCALAPPDATA\Programs\forma-data-manager\resources\engine\forma-data.exe" serve
+& "$env:LOCALAPPDATA\Programs\Forma Data Manager\resources\engine\forma-data.exe" serve
 ```
 
 Other engine commands: `build --zip <extract.zip> [--data-dir DIR] [--force]`, `info`, `rollback`, `version`.

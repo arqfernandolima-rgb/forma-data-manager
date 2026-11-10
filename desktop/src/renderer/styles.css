@@ -137,8 +137,9 @@ details > summary + * { margin-top: 10px; }
 .wsteps li.current { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .wsteps li.current .n { border-color: var(--accent); }
 .wnav { display: flex; gap: 10px; margin-top: 22px; }
-.disclaimer-box { max-height: 300px; overflow: auto; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 13px; }
+.disclaimer-box { max-height: max(220px, calc(100vh - 420px)); overflow: auto; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 13px; }
 .disclaimer-box p { margin-bottom: 8px; }
+.disclaimer-box p:last-child { margin-bottom: 0; }
 #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 8px; font-size: 13px; max-width: 70vw; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2); }
 #toast.bad { background: var(--bad); color: #fff; }
 /* Layout fixes */

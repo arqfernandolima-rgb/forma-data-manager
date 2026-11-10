@@ -37,11 +37,11 @@ npm run dist                              # Windows installer in dist/ (needs ..
 ## CI and releases
 
 - **CI** (`.github/workflows/ci.yml`, every push): engine tests, desktop tests, then on `windows-latest`: compile the engine, build a synthetic extract, run the compiled `.exe` as an MCP server through the smoke test (this also verifies the query worker inside the compiled binary), build the installer, and upload it with SHA-256 checksums as a workflow artifact.
-- **Release** (`.github/workflows/release.yml`): push a tag `vX.Y.Z` whose version matches `engine/package.json` and `desktop/package.json`. The workflow tests, builds and publishes a GitHub pre-release with the installer and `SHA256SUMS.txt`.
+- **Release** (`.github/workflows/release.yml`): push a tag `vX.Y.Z` whose version matches `engine/package.json` and `desktop/package.json`. The workflow tests, builds and publishes a GitHub release marked **latest**, with the installer, `SHA256SUMS.txt`, and release notes made of install steps plus that version's section of `CHANGELOG.md`. A tag with a suffix (`vX.Y.Z-beta.1`, with the same version in both package files) is published as a pre-release instead.
 
 ```bash
 # bump versions in engine/package.json, engine/src/version.js (ENGINE_VERSION) and desktop/package.json, update CHANGELOG.md
-git tag v4.0.1 && git push origin v4.0.1
+git tag -a v4.1.4 -m "Forma Data Manager 4.1.4" && git push origin v4.1.4
 ```
 
 Bump `SCHEMA_VERSION` in `engine/src/version.js` whenever the database layout changes in a way the server relies on. Servers refuse databases with a different layout version and tell the user to sync.

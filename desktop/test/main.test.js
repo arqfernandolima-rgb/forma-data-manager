@@ -92,7 +92,7 @@ test('APS client: retries 429 with Retry-After, explains Data Connector 403', as
   const aps = new ApsClient({ auth, fetch, log: quietLog });
   const hubs = await aps.listHubs();
   assert.deepEqual(hubs, [{ id: 'b.acc-1', accountId: 'acc-1', name: 'Demo Hub', region: 'US' }]);
-  await assert.rejects(aps.get('/data-connector/v1/accounts/acc-1/requests'), /hub \(account\) admin with Executive access.*Custom Integrations/);
+  await assert.rejects(aps.get('/data-connector/v1/accounts/acc-1/requests'), /Executive Overview access to the hub.*Custom Integrations/);
 });
 
 test('job outcome mapping', () => {

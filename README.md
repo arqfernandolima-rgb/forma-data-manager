@@ -3,12 +3,14 @@
 <h1 align="center">Forma Data for Claude</h1>
 
 <p align="center">
-Ask Claude about your Autodesk Forma (ACC / BIM 360) hub in plain language, and get answers and dashboards you can trust.<br>
+Ask Claude about your Autodesk Forma (ACC / BIM 360) hub in plain language, and get answers and dashboards built on clean, checked data.<br>
 A Windows app pulls your hub's data from Data Connector every day, builds a fast local database, and connects it to Claude Desktop through MCP.
 </p>
 
 > [!IMPORTANT]
 > **Unofficial test code, provided as is.** This is a personal community project. It is **not** an Autodesk product and is not endorsed, supported or warranted by Autodesk, Inc. or Anthropic. **Autodesk, Anthropic and the authors have no liability** for its use. Read the [DISCLAIMER](DISCLAIMER.md) before installing.
+
+<p align="center"><img src="docs/images/status.png" width="760" alt="Forma Data Manager's Status page: data as of today, what changed since the previous extract, and the timeline of the last sync (example data)"></p>
 
 ---
 
@@ -27,7 +29,7 @@ A Windows app pulls your hub's data from Data Connector every day, builds a fast
 2. **Builds a database you can trust.** The engine turns the extract into a SQLite database using Autodesk's own published schema. It adds cleaned-up views (`v_rfis`, `v_change_order_chains`, …) and a precomputed per-project rollup, checks the result, and only then swaps it in. A bad extract never replaces good data.
 3. **Connects Claude.** The installer's setup wizard registers the `forma-data` MCP server with Claude Desktop. The dashboard guide (house style plus data rules) is built into the server, so there's nothing else to install. Claude can then answer questions and build dashboards in seconds.
 
-## Why answers are accurate
+## Built for accurate answers
 
 | Problem with typical setups | What this does |
 |---|---|
@@ -45,12 +47,12 @@ Details: [docs/data-model.md](docs/data-model.md).
 ## Requirements
 
 - Windows 10 or 11 (x64) and [Claude Desktop](https://claude.ai/download). Claude Code also works.
-- An Autodesk Forma (ACC) or BIM 360 hub, and a user who is a **hub admin with Executive access**, because the Data Connector API requires it.
+- An Autodesk Forma (ACC) or BIM 360 hub, and a user with **Executive Overview** access to it, because Data Connector needs it to extract the whole hub. A hub admin grants it in Hub Admin (being a hub admin doesn't include it automatically).
 - A free **APS app** (client ID) that a hub admin adds under **Hub Admin → Custom Integrations**. This takes about 5 minutes: see [docs/aps-app-setup.md](docs/aps-app-setup.md).
 
 ## Install
 
-1. Download `Forma-Data-Manager-Setup-<version>.exe` from the newest release on the [Releases](../../releases) page. The installer isn't code-signed, so SmartScreen may warn you: choose **More info → Run anyway**. Compare the file against `SHA256SUMS.txt` if you like.
+1. Download `Forma-Data-Manager-Setup-<version>.exe` from the [latest release](../../releases/latest). The installer isn't code-signed, so SmartScreen may warn you: choose **More info → Run anyway**. Compare the file against `SHA256SUMS.txt` if you like.
 2. Accept the license and disclaimer, then install. No admin rights needed.
 3. The setup wizard opens: disclaimer → APS client ID → **Sign in with Autodesk** → pick your hub → data folder → daily schedule (Autodesk prepares it, recommended, or this computer starts it) → **Set up Claude Desktop** → first sync.
 4. Fully quit and reopen Claude Desktop. Ask something like *"Using forma-data, which active projects have the most overdue RFIs?"*
@@ -86,6 +88,7 @@ Prefer it as a skill? The repository is also a **Claude plugin marketplace**: in
 
 - Your Autodesk sign-in uses OAuth with PKCE (no client secret) through **your own** APS app. Tokens are encrypted with Windows DPAPI for your Windows account.
 - The data stays on your computer, in the folder you choose. Nothing is sent to the authors.
+- The app's only changes in your hub are Data Connector requests: one per sync it starts (it cleans up its own old ones) and one daily schedule it maintains. Other hub admins can see them. Details: [SECURITY.md](SECURITY.md#what-it-changes-in-your-hub).
 - When you ask Claude a question, query **results** go to Claude as part of your conversation, under your Claude account's terms. Decide whether that's appropriate for your data.
 - The MCP server is read-only (SQLite opened read-only, `query_only` on, single SELECT/WITH statements).
 
@@ -93,7 +96,7 @@ More: [SECURITY.md](SECURITY.md).
 
 ## Limitations
 
-- Snapshot data: it's as fresh as the last extract (Data Connector runs take minutes to hours on Autodesk's side). Every answer states "Data as of …".
+- Snapshot data: it's as fresh as the last extract (Data Connector runs take minutes to hours on Autodesk's side). Claude is told to state "Data as of …" in its answers.
 - Data Connector allows **24 extraction jobs per rolling 24 hours** per hub and per user, and jobs started in the Forma web UI count too.
 - Tested with US-region hubs. EMEA/AUS hubs should work but are unverified.
 - Windows only for the app. The engine itself runs anywhere Bun runs.

@@ -5,11 +5,11 @@
 - Windows 10 or 11, 64-bit. About 5 GB free disk space for a large hub (the download plus two database versions).
 - [Claude Desktop](https://claude.ai/download), installed and opened at least once.
 - An APS client ID that your hub trusts: see [aps-app-setup.md](aps-app-setup.md).
-- A hub admin account with Executive access.
+- An Autodesk account with **Executive Overview** access to the hub (a hub admin grants it).
 
 ## Install
 
-1. Download `Forma-Data-Manager-Setup-<version>.exe` and `SHA256SUMS.txt` from the repository's **Releases** page.
+1. Download `Forma-Data-Manager-Setup-<version>.exe` and `SHA256SUMS.txt` from the [latest release](https://github.com/arqfernandolima-rgb/forma-data-manager/releases/latest).
 2. Optional: verify the file in PowerShell with `Get-FileHash .\Forma-Data-Manager-Setup-<version>.exe` and compare it with `SHA256SUMS.txt`.
 3. Run the installer. It isn't code-signed yet, so Windows SmartScreen may say "Windows protected your PC": choose **More info → Run anyway**.
 4. Read and accept the license and disclaimer. The install is per-user, so no admin rights are needed.
@@ -60,7 +60,8 @@ Don't uninstall first: a real uninstall also removes the Claude Desktop entry (b
 
 Use **Windows Settings → Apps → Forma Data Manager → Uninstall**. The uninstaller also:
 
-- removes the `forma-data` entry from Claude Desktop's config (after a backup), and
-- removes the "start with Windows" entry.
+- removes the `forma-data` entry from Claude Desktop's config (after a backup),
+- removes the "start with Windows" entry, and
+- deletes the daily Data Connector request the app maintained (if the PC is online; otherwise delete *Forma Data Manager daily extraction - managed by the app* in Data Connector yourself).
 
-It **keeps** your data folder and `%APPDATA%\Forma Data Manager` in case you reinstall. Delete those two folders by hand to remove everything. To also remove the Data Connector request history the app created, open Data Connector in Forma: the app only ever creates one-time requests, and it deletes its older ones after each successful sync.
+It **keeps** your data folder and `%APPDATA%\Forma Data Manager` in case you reinstall. Delete those two folders by hand to remove everything. The last one-time request the app created stays in Data Connector's history (it deletes the older ones after each successful sync); delete it there if you like.

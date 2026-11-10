@@ -92,7 +92,8 @@ function render() {
 const DISCLAIMER = [
   'Forma Data Manager is an independent, community-built test tool. It is not an Autodesk product, and it is not developed, endorsed, supported or warranted by Autodesk, Inc. or by Anthropic.',
   'The software is provided "as is", without warranty of any kind, express or implied, including fitness for a particular purpose. Autodesk, Inc., Anthropic, and the authors have no liability for any claim, damages, data loss, cost, or other liability arising from its use.',
-  'It reads your hub’s data through the official Autodesk Data Connector API using your own sign-in and your own APS app, and stores a copy on this computer. You are responsible for handling that data according to your organization’s policies and your agreements with Autodesk. Answers produced by AI models from this data can be wrong; verify anything important in Autodesk Forma.',
+  'It reads your hub’s data through the official Autodesk Data Connector API using your own sign-in and your own APS app, and stores a copy of the whole hub (every project, including cost) on this computer. To do that it creates Data Connector requests in your hub, including one daily schedule that it maintains; other hub admins can see them.',
+  'When you ask Claude a question, the query results are sent to Claude as part of your conversation and handled under your (or your organization’s) agreement with Anthropic. You are responsible for handling this data according to your organization’s policies and your agreements with Autodesk and Anthropic. Answers produced by AI models can be wrong; verify anything important in Autodesk Forma.',
   'Autodesk, Autodesk Forma, Autodesk Construction Cloud and BIM 360 are trademarks of Autodesk, Inc. Claude is a trademark of Anthropic, PBC.',
 ];
 
@@ -104,8 +105,8 @@ function apsSteps() {
     h('li', {}, 'Set the callback URL to:', copybox(S.redirectUri)),
     h('li', {}, 'Under API access, enable the Autodesk Construction Cloud and Data Management APIs.'),
     h('li', {}, 'Copy the app’s ', h('b', {}, 'Client ID'), ' into the box below.'),
-    h('li', {}, 'In Forma, a hub admin adds that Client ID under ', h('b', {}, 'Hub Admin → Custom Integrations'), '.'),
-    h('li', {}, 'The person signing in must be a hub admin with Executive access. That’s what the Data Connector API requires.')
+    h('li', {}, 'In Forma, a hub admin adds that Client ID under ', h('b', {}, 'Hub Admin → Custom Integrations'), ' (if asked, keep Account Administration and Document Management checked).'),
+    h('li', {}, 'The person signing in needs ', h('b', {}, 'Executive Overview'), ' access to the hub, which Data Connector requires to extract all projects. A hub admin grants it; being a hub admin doesn’t include it.')
   );
 }
 
@@ -153,7 +154,7 @@ function wWelcome() {
       'label',
       { class: 'check' },
       h('input', { type: 'checkbox', checked: accepted, onchange: (e) => ((accepted = e.target.checked), (nextBtn.disabled = !accepted)) }),
-      h('span', {}, 'I understand this is unofficial test code, provided as is, with no warranty and no liability for Autodesk, Anthropic or the authors.')
+      h('span', {}, 'I’ve read the above. I understand this is unofficial test code, provided as is, with no warranty and no liability for Autodesk, Anthropic or the authors, and that query results go to Claude when I ask questions.')
     ),
     nav
   );
@@ -806,7 +807,7 @@ function renderAbout() {
     h('h1', {}, 'About'),
     h('p', { class: 'lead' }, `Forma Data Manager ${S.version}`),
     h('div', { class: 'card' }, h('h2', {}, 'Disclaimer'), DISCLAIMER.map((p) => h('p', {}, p))),
-    h('div', { class: 'card' }, h('h2', {}, 'Links'), h('div', { class: 'row' }, link('Source code and documentation', S.repoUrl), link('Report an issue', `${S.repoUrl}/issues`), link('License (MIT)', `${S.repoUrl}/blob/main/LICENSE`))),
+    h('div', { class: 'card' }, h('h2', {}, 'Links'), h('div', { class: 'row' }, link('Source code and documentation', S.repoUrl), link('Report an issue', `${S.repoUrl}/issues`), link('Full disclaimer', `${S.repoUrl}/blob/main/DISCLAIMER.md`), link('Privacy and security', `${S.repoUrl}/blob/main/SECURITY.md`), link('License (MIT)', `${S.repoUrl}/blob/main/LICENSE`))),
     h('div', { class: 'card' }, h('h2', {}, 'Files'), h('p', { class: 'small' }, 'Log: ', h('span', { class: 'mono', text: S.logFile })), h('p', { class: 'small' }, 'Engine: ', h('span', { class: 'mono', text: S.engineExe || 'development mode' })), h('div', { class: 'row' }, btn('Open log folder', () => fdm.openPath('logs')), btn('Open data folder', () => fdm.openPath('data'))))
   );
 }

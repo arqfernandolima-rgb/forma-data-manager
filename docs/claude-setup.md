@@ -19,7 +19,7 @@ Then fully quit Claude Desktop (tray icon → **Quit**) and open it again.
 {
   "mcpServers": {
     "forma-data": {
-      "command": "C:\\Users\\<you>\\AppData\\Local\\Programs\\forma-data-manager\\resources\\engine\\forma-data.exe",
+      "command": "C:\\Users\\<you>\\AppData\\Local\\Programs\\Forma Data Manager\\resources\\engine\\forma-data.exe",
       "args": ["serve"],
       "env": { "FORMA_DATA_DIR": "C:\\Users\\<you>\\AppData\\Local\\FormaData" }
     }
@@ -34,7 +34,7 @@ No Bun or Node is needed. `forma-data.exe` is self-contained.
 The app shows this command with your paths filled in (Claude setup → Claude Code):
 
 ```powershell
-claude mcp add forma-data --scope user -e FORMA_DATA_DIR="C:\Users\<you>\AppData\Local\FormaData" -- "C:\Users\<you>\AppData\Local\Programs\forma-data-manager\resources\engine\forma-data.exe" serve
+claude mcp add forma-data --scope user -e FORMA_DATA_DIR="C:\Users\<you>\AppData\Local\FormaData" -- "C:\Users\<you>\AppData\Local\Programs\Forma Data Manager\resources\engine\forma-data.exe" serve
 ```
 
 Claude Desktop and Claude Code can use the same data folder at the same time. Each runs its own read-only server, and both follow `current.json` when a new build lands.

@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.1.4 (2026-11)
+
+First release for testers (earlier builds were pre-releases).
+
+**What you get**
+- A Windows tray app that syncs your whole Autodesk Forma (ACC / BIM 360) hub every day through Data Connector. By default Autodesk prepares the extract on its servers at your time, even while your PC sleeps, and the app downloads it, builds a local database and swaps it in only after it passes its checks.
+- The `forma-data` MCP server for Claude Desktop (and Claude Code): eight read-only tools, a built-in dashboard guide, and views that keep the numbers right (zeros stay zeros, no double counting, overdue measured against the extract date).
+- A short summary of what changed with every sync, a History page, rollback, and a tray icon whose color shows whether data is ready, syncing, stale or needs attention.
+- It rides out sleep and lost connections, and retries a failed daily sync the same day.
+
+**Changes since 4.1.3**
+- The disclaimer in the app now also says that query results go to Claude when you ask a question, and that the app creates Data Connector requests in your hub (including the daily schedule it maintains). DISCLAIMER.md and SECURITY.md describe exactly what the app creates in your hub.
+- The setup wizard's disclaimer box is taller, so all of it is visible, and the checkbox now covers everything in it. The About page links to the full disclaimer and to SECURITY.md.
+- Setup steps corrected: the signed-in user needs **Executive Overview** access (a hub admin grants it; being a hub admin doesn't include it), and the Custom Integrations step names the right access options (Account Administration and Document Management). The 403 message says the same.
+- Docs: install paths in the manual Claude setup, what the uninstaller removes, a screenshot in the README, and wording that no longer overpromises about AI answers.
+- Releases are now normal (latest) releases with install steps and what's new in the release notes.
+
 ## 4.1.3 (2026-11)
 
 ### Forma Data Manager (Windows app)

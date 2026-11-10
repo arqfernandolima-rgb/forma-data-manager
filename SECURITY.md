@@ -19,6 +19,15 @@ This is unofficial test code (see [DISCLAIMER.md](DISCLAIMER.md)). Here's exactl
 
 That's all. The app doesn't call home, has no telemetry and no auto-updater. The MCP server (`forma-data.exe serve`) makes **no network calls**; it reads local files and talks to Claude over stdio.
 
+## What it changes in your hub
+
+The app never edits project data. Its only writes are Data Connector **requests** in your hub:
+
+- **One-time requests**, one per sync it starts. After a successful sync it deletes the older requests **it** created (it keeps their IDs, and never touches requests made by people or other tools).
+- **One daily scheduled request** when "Autodesk prepares it" is on (the default), named *Forma Data Manager daily extraction - managed by the app*. The app re-activates, extends or recreates it as needed, and deletes it when you choose "This computer starts it", turn the daily sync off, change hub, or uninstall (if the PC is online).
+
+These requests and their jobs are visible to the hub's other admins in Data Connector, and the jobs count toward Autodesk's 24-per-day limit.
+
 ## Data at rest
 
 - Extracts and databases live in the data folder you choose (default `%LOCALAPPDATA%\FormaData`), protected by normal Windows file permissions. Use an encrypted disk (BitLocker) if your data requires it.
@@ -34,4 +43,4 @@ The MCP server returns query **results** to the Claude client you connect, as pa
 
 ## Reporting a vulnerability
 
-Please **don't** open a public issue. Use GitHub's private vulnerability reporting (repository **Security → Report a vulnerability**). This is a best-effort personal project with no response-time commitment.
+Please **don't** open a public issue with details. Use GitHub's private vulnerability reporting (repository **Security → Report a vulnerability**). If that option isn't shown, open an issue that only asks for a private contact, without any details. This is a best-effort personal project with no response-time commitment.

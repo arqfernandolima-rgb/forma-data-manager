@@ -18,20 +18,20 @@ The Data Connector API only accepts a **user sign-in** (OAuth 3-legged) made thr
 A hub admin adds the Client ID to the hub:
 
 1. In Autodesk Forma, open **Hub Admin** (formerly Account Admin) → **Settings** → **Custom Integrations**.
-2. **Add custom integration**, choose the access it needs (Document Management and Project Management), paste the **Client ID**, and give it a name like "Forma Data Manager".
+2. **Add custom integration**, paste the **Client ID**, and give it a name like "Forma Data Manager". If the dialog asks which access to grant, keep both **Account Administration** and **Document Management** checked and choose **I'm the developer**. (Newer hubs only ask for the Client ID and a name.)
 
 Without this step, signing in works but Data Connector calls fail with **403**.
 
 ## 3. Who can sign in
 
-The Data Connector API requires the signed-in user to be a **hub (account) admin with Executive access**. Project admins can't run account-level extractions.
+To extract the whole hub, the Data Connector API requires the signed-in user to have **Executive Overview** access. A hub (account) admin grants it in Hub Admin; being a hub admin doesn't include it automatically. Project admins can only extract their own projects, which this app doesn't do.
 
 ## 4. Scopes requested
 
 | Scope | Why |
 |---|---|
 | `data:read` | List hubs; read Data Connector requests, jobs and files |
-| `data:write`, `data:create` | Create a Data Connector extraction request; delete the requests this app created |
+| `data:write`, `data:create` | Create Data Connector requests (one per sync, plus the daily schedule the app maintains); turn that schedule back on or extend it; delete the requests this app created |
 | `user-profile:read` | Show "Signed in as …" in the app |
 
 ## Troubleshooting
@@ -41,5 +41,5 @@ The Data Connector API requires the signed-in user to be a **hub (account) admin
 | Browser shows an error about the redirect URI | The callback URL in your APS app must match the app exactly, including the port and `/callback` |
 | "Port 8642 is already in use" | Pick another port in Settings and update the APS callback URL |
 | Hub list is empty | The Client ID isn't added under Custom Integrations in that hub, or the account has no ACC/BIM 360 hubs. You can also enter the hub ID by hand |
-| 403 from Data Connector | Check the Custom Integration, and that the user is a hub admin with Executive access |
+| 403 from Data Connector | Check the Custom Integration, and that the signed-in user has **Executive Overview** access |
 | "Your Autodesk sign-in expired" | Refresh tokens expire after about 15 days without use. Sign in again. The app refreshes automatically while it runs |

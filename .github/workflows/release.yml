@@ -49,16 +49,41 @@ jobs:
         run: |
           Get-ChildItem *.exe | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Out-File -Encoding ascii SHA256SUMS.txt
 
+      - name: Release notes
+        shell: bash
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          REPO="https://github.com/${GITHUB_REPOSITORY}"
+          # This version's section of CHANGELOG.md (from its "## <ver>" heading to the next "## ").
+          awk -v v="$VER" '$0 ~ "^## "v"( |$)" {on=1; next} on && /^## / {exit} on {print}' CHANGELOG.md > changes.md
+          {
+            echo "> **Unofficial test build, provided as is.** Not an Autodesk product; not supported or warranted by Autodesk or Anthropic. Read the [disclaimer](${REPO}/blob/main/DISCLAIMER.md) before installing."
+            echo
+            echo "## Install"
+            echo
+            echo "1. Download **Forma-Data-Manager-Setup-${VER}.exe** below (Windows 10/11, x64). It isn't code-signed, so if SmartScreen warns, choose **More info → Run anyway**. You can check it against \`SHA256SUMS.txt\`."
+            echo "2. Run it. No admin rights needed. The setup wizard walks you through the rest."
+            echo "3. Before you start, you need an APS client ID added to your hub and **Executive Overview** access: see [APS app setup](${REPO}/blob/main/docs/aps-app-setup.md) (about 5 minutes)."
+            echo
+            echo "Already installed? Install this over it: settings, sign-in and data are kept."
+            echo
+            echo "Guide: [README](${REPO}#readme) · [Troubleshooting](${REPO}/blob/main/docs/troubleshooting.md) · [Report an issue](${REPO}/issues) (never attach extracts or project data)"
+            echo
+            echo "## What's new in ${VER}"
+            echo
+            cat changes.md
+          } > notes.md
+          cat notes.md
+
       - name: Publish release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NOTES="Unofficial test build, provided as is. Not an Autodesk product. See DISCLAIMER.md.
-
-          Windows 10/11 x64. The installer is not code-signed, so Windows SmartScreen may warn: choose More info, then Run anyway.
-          Verify the download with SHA256SUMS.txt.
-
-          See CHANGELOG.md for what's new."
+          # vX.Y.Z is a normal release (and the latest); vX.Y.Z-anything (e.g. -beta.1) is a pre-release.
+          case "$GITHUB_REF_NAME" in
+            *-*) KIND="--prerelease" ;;
+            *) KIND="--latest" ;;
+          esac
           gh release create "$GITHUB_REF_NAME" desktop/dist/Forma-Data-Manager-Setup-*.exe desktop/dist/SHA256SUMS.txt \
-            --title "Forma Data Manager $GITHUB_REF_NAME" --notes "$NOTES" --prerelease
+            --title "Forma Data Manager $GITHUB_REF_NAME" --notes-file notes.md $KIND
