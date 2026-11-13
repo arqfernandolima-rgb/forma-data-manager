@@ -41,7 +41,7 @@ Claude Desktop and Claude Code can use the same data folder at the same time. Ea
 
 ## The dashboard guide
 
-The guide teaches Claude the dashboard layout (header with "Data as of", KPI strip, overview chart, details, notes, drill-downs) and the data rules: status groups, change-order chains, variance sign, fan-out, and demo-project labeling. The source is [`claude-plugin/skills/forma-data-dashboards/SKILL.md`](../claude-plugin/skills/forma-data-dashboards/SKILL.md).
+The guide puts **accuracy and speed first**. By default Claude draws one quick dashboard right in the chat (or, where there's no inline visual tool, one small self-contained HTML artifact): a "Data as of" header, a few KPI tiles, at most two small visuals and a short list. It gets there in about four tool calls using ready-made queries, checks that the parts add up to the totals, and doesn't upload datasets or build dashboard-type artifacts unless you ask for a full dashboard. The guide also holds the data rules: status groups, who holds an item (users, companies and roles), change-order chains, variance sign, fan-out, and demo-project labeling. The source is [`claude-plugin/skills/forma-data-dashboards/SKILL.md`](../claude-plugin/skills/forma-data-dashboards/SKILL.md).
 
 ### Built in (nothing to install)
 
@@ -59,5 +59,7 @@ Claude doesn't let other apps add skills or plugins to your account, so these ar
 | **Team / Enterprise** | An owner can provision the skill for the whole organization from the ZIP, or add the marketplace for everyone |
 
 When the skill is loaded, Claude skips `forma_dashboard_guide` (it's the same content).
+
+**Other dashboard skills.** General-purpose skills, such as the "build dashboard" skill in Anthropic's data plugin, are made for big interactive reports (filters, many charts, a file to download). For Forma data, the guide and the server instructions tell Claude to use this guide instead. If Claude still builds a full report when you wanted a quick look, say "quick dashboard", or turn the other skill off in Claude under **Customize → Skills**.
 
 **Customize before saving** (in the app) opens the SKILL.md text so you can change colors, KPIs or tone, or rename the skill (the folder name follows the `name:` line). The app checks the front matter before packaging.

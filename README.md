@@ -27,7 +27,7 @@ A Windows app pulls your hub's data from Data Connector every day, builds a fast
 
 1. **Pulls data from Autodesk.** You sign in once with your Autodesk account. Every day at a time you choose, Autodesk's Data Connector prepares a fresh extract of the whole hub on its servers (the app sets up and looks after that daily schedule for you), and the app downloads it. **Sync now** starts an extra extraction whenever you want one. No manual ZIP files.
 2. **Builds a database you can trust.** The engine turns the extract into a SQLite database using Autodesk's own published schema. It adds cleaned-up views (`v_rfis`, `v_change_order_chains`, …) and a precomputed per-project rollup, checks the result, and only then swaps it in. A bad extract never replaces good data.
-3. **Connects Claude.** The installer's setup wizard registers the `forma-data` MCP server with Claude Desktop. The dashboard guide (house style plus data rules) is built into the server, so there's nothing else to install. Claude can then answer questions and build dashboards in seconds.
+3. **Connects Claude.** The installer's setup wizard registers the `forma-data` MCP server with Claude Desktop. The dashboard guide is built into the server, so there's nothing else to install. Ask a question and Claude answers with checked numbers; ask for a dashboard and it draws a quick one right in the chat.
 
 ## Built for accurate answers
 
@@ -78,7 +78,7 @@ More detail: [docs/install.md](docs/install.md).
 | `forma_describe` | Columns, Autodesk's descriptions and real values (e.g. every status) before filtering |
 | `forma_catalog` | Where data lives; search table/column names and descriptions |
 | `forma_search` | Full-text search across issues, RFIs, submittals, meetings, forms, cost and more |
-| `forma_dashboard_guide` | The dashboard house style and data rules; Claude loads it on its own before building a dashboard |
+| `forma_dashboard_guide` | Quick-dashboard defaults, the accuracy checklist, data rules and query recipes; Claude loads it on its own before building a dashboard |
 
 Plus the `forma_dashboard` prompt. Reference: [docs/mcp-tools.md](docs/mcp-tools.md).
 

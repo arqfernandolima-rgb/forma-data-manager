@@ -11,7 +11,7 @@
 ```bash
 cd engine
 bun install
-bun test                                  # 36 tests: normalization, SQL guard, full build on a synthetic extract, view layout checks, change summary
+bun test                                  # 42 tests: normalization, SQL guard, full build on a synthetic extract, view layout checks, change summary, user/company/role names
 bun src/cli.js build --zip path/to/autodesk_data_extract.zip --data-dir ./data
 bun src/cli.js serve --data-dir ./data    # MCP over stdio
 bun scripts/smoke.js ./data               # starts the server as an MCP client would and calls every tool

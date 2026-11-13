@@ -1,6 +1,6 @@
 {
   "name": "forma-data-engine",
-  "version": "4.1.4",
+  "version": "4.2.0",
   "private": true,
   "type": "module",
   "description": "Builds a SQLite database from Autodesk Forma Data Connector extracts and serves it to Claude over MCP.",

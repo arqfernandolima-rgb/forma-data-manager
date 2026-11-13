@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.2.0 (2026-11)
+
+**Who holds an item now has a name, even when it's a company or a role.**
+- Issues (ACC and BIM 360), RFIs, submittals and forms assigned to a company or role used to show no name. Autodesk stores those as "Oxygen" IDs that the views didn't look up. Now `assignee_name` and `manager_name` cover users, companies and roles. On a real hub: 624 of 629 company-held issues and all 306 role-held issues now show a name, with no change in row counts.
+- Submittals gain `ball_in_court_names`, `manager_name` and `subcontractor_name`. They were raw IDs before; all 9,235 ball-in-court lists on a real hub now resolve.
+- Contracts show their company again: the view looked up the wrong ID column, so `company_name` was empty for every contract. Assets also fall back to the Oxygen ID when needed.
+- Names appear after the next sync. Click **Sync now** after updating, or wait for the daily one.
+
+**Dashboards: accuracy and speed first.**
+- The dashboard guide (built into the server, and the optional plugin) is now quick by default. Claude draws one dashboard right in the chat: a "Data as of" header, a few KPI tiles, at most two small visuals and a short list. Where the chat has no inline visual tool, it makes one small self-contained HTML artifact. It doesn't upload datasets, use dashboard-type artifacts or add filters and tabs unless you ask for a full dashboard.
+- It gets there in about four tool calls, using one-call query recipes (KPIs and every breakdown in one query), and it checks that parts add up to totals before drawing.
+- For Forma data, the guide tells Claude to use it instead of generic dashboard skills (like the data plugin's "build dashboard"), which build large interactive reports.
+- The guide is about 18% shorter, so it loads faster. Plugin version 4.2.0.
+
 ## 4.1.4 (2026-11)
 
 First release for testers (earlier builds were pre-releases).

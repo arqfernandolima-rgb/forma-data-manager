@@ -13,7 +13,7 @@ const csvCell = (v) => {
 };
 
 /** Writes a tiny Data Connector-shaped extract (CSVs + schemas/schema.json) into dir. */
-export function writeMiniExtract(dir, { omitRfiDeletedAt = true, nextDay = false } = {}) {
+export function writeMiniExtract(dir, { omitRfiDeletedAt = true, nextDay = false, parties = false } = {}) {
   const P1 = '11111111-1111-1111-1111-111111111111';
   const P2 = '22222222-2222-2222-2222-222222222222';
   const P3 = '33333333-3333-3333-3333-333333333333';
@@ -93,6 +93,58 @@ export function writeMiniExtract(dir, { omitRfiDeletedAt = true, nextDay = false
     tables.issues_issues.rows.push(['I5', P1, '5', 'Cracked tile', '', 'open', 'T1', 'U2', '2026-07-01 00:00:00', '2026-06-08 09:00:00', '', 'true']);
     tables.admin_projects.rows[1][2] = 'archived';
     tables.admin_projects.rows.push([P3, 'New Clinic', 'active', 'Hospital', 'production', '00200', '', 't', '0']);
+  }
+
+  if (parties) {
+    // Items held by companies and roles, the way Autodesk stores them: issues, RFIs and submittals
+    // use Oxygen (member group) IDs; forms and cost use admin IDs. The same company and role appear
+    // in two projects, which must not duplicate any row.
+    const OX_GENSLER = '693017753';
+    const OX_ARCH = '700001';
+    tables.admin_companies = { cols: { id: 'string: UUID', name: 'string' }, rows: [['CO-A', 'Gensler'], ['CO-B', 'CREO']] };
+    tables.admin_project_companies = {
+      cols: { project_id: 'string: UUID', bim360_project_id: 'string: UUID', company_id: 'string: UUID', company_oxygen_id: 'string' },
+      rows: [[P1, P1, 'CO-A', OX_GENSLER], [P2, P2, 'CO-A', OX_GENSLER]],
+    };
+    tables.admin_project_roles = {
+      cols: { bim360_project_id: 'string: UUID', role_id: 'string: UUID', role_oxygen_id: 'string', name: 'string', status: 'string' },
+      rows: [[P1, 'RL-1', OX_ARCH, 'Architect', 'active'], [P2, 'RL-1', OX_ARCH, 'Architect', 'active']],
+    };
+    tables.admin_roles = { cols: { id: 'string: UUID', name: 'string' }, rows: [['RL-1', 'Architect']] };
+    tables.issues_issues.cols.assignee_type = 'string';
+    for (const r of tables.issues_issues.rows) r.push(r[7] ? 'user' : '');
+    tables.issues_issues.rows.push(
+      ['I6', P1, '6', 'Facade clash', '', 'open', 'T1', OX_GENSLER, '2026-05-20 00:00:00', '2026-05-01 08:00:00', '', 'true', 'company'],
+      ['I7', P1, '7', 'Stair width', '', 'in_review', 'T1', OX_ARCH, '', '2026-05-02 08:00:00', '', 'true', 'role']
+    );
+    tables.rfis_rfis.cols.manager_type = 'string';
+    for (const r of tables.rfis_rfis.rows) r.push('user');
+    tables.rfis_rfis.rows.push(['R3', P1, '003', 'Stair landing', 'open', 'Unknown', '2026-06-30 00:00:00', '2026-05-03 00:00:00', OX_ARCH, ...(omitRfiDeletedAt ? [] : ['']), 'role']);
+    tables.submittalsacc_items = {
+      cols: { id: 'string: UUID', bim360_project_id: 'string: UUID', title: 'string', status_value: 'string', manager: 'string', subcontractor: 'string', ball_in_court: 'string' },
+      rows: [
+        ['S1', P1, 'Door hardware', 'Open', 'U1', OX_GENSLER, `{U2,${OX_GENSLER},${OX_ARCH}}`],
+        ['S2', P1, 'Glazing', 'Closed', OX_ARCH, '', '{}'],
+        ['S3', P1, 'Steel', 'Open', 'U2', '', '["U1"]'],
+        ['S4', P1, 'Odd value', 'Open', '', '', 'not "a list'],
+      ],
+    };
+    tables.forms_forms = {
+      cols: { id: 'string: UUID', bim360_project_id: 'string: UUID', status: 'string', assignee_id: 'string', assignee_type: 'string', assignee_type_id: 'string' },
+      rows: [
+        ['F1', P1, 'in_progress', '', 'company', 'CO-B'],
+        ['F2', P1, 'in_progress', '', 'role', 'RL-1'],
+        ['F3', P1, 'in_progress', 'U1', '', 'U1'],
+      ],
+    };
+    tables.cost_contracts = {
+      cols: { id: 'string: UUID', bim360_project_id: 'string: UUID', code: 'string', name: 'string', company_id: 'string', company_uid: 'string: UUID' },
+      rows: [
+        ['K1', P1, '001', 'Facade', OX_GENSLER, 'CO-A'],
+        ['K2', P1, '002', 'Structure', '', 'CO-B'],
+        ['K3', P1, '003', 'Interiors', OX_GENSLER, ''],
+      ],
+    };
   }
 
   const schema = {};

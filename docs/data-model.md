@@ -26,23 +26,24 @@ All views follow the same rules:
 2. **Lookups can't multiply rows.** Project, user, company and type names are scalar lookups (`SELECT … LIMIT 1`), not JOINs, so a view always has exactly one row per base record. A real hub had a duplicated user ID; with JOINs, that duplicates every issue assigned to them.
 3. **`status_group`** normalizes each module's status vocabulary.
 4. **`is_overdue`, `days_overdue`, `age_days`** are measured against the extraction date (`as_of`), not today, so a two-week-old snapshot doesn't look worse every day.
+5. **Whoever holds an item has a name**, whether it's a user, a company or a role. Issues, RFIs and submittals store companies and roles as Autodesk "Oxygen" IDs, resolved through `admin_project_companies.company_oxygen_id` and `admin_project_roles.role_oxygen_id`. Forms and cost store regular IDs (`admin_companies.id`, `admin_roles.id`; contracts use `company_uid`).
 
 | View | One row per | Highlights |
 |---|---|---|
 | `v_projects` | project | `project_id`, `project_name`, `status`, `project_type`, `classification`, `is_production`, `looks_like_test` |
-| `v_issues`, `v_issues_bim360` | issue | type, subtype, root cause, assignee/creator/owner names |
+| `v_issues`, `v_issues_bim360` | issue | type, subtype, root cause, `assignee_name` (user, company or role; see `assignee_type`), creator/owner names |
 | `v_all_issues` | issue | both, with `source` = `acc` / `bim360` |
-| `v_rfis` | RFI | manager, `cost_impact`, `schedule_impact`, `official_response` |
-| `v_submittals` | submittal item | `status` (= status_value), `response`, spec, package, ball in court |
+| `v_rfis` | RFI | `manager_name` (user, company or role; see `manager_type`), `cost_impact`, `schedule_impact`, `official_response` |
+| `v_submittals` | submittal item | `status` (= status_value), `response`, spec, package, `ball_in_court_names`, `manager_name`, `subcontractor_name` |
 | `v_assets` | asset | `category_name`, `status_label` + `status_sort_order` (workflow stage), company |
 | `v_checklists` | checklist | progress, item counts, template title (`scheduled_date` drives overdue) |
 | `v_meetings` | meeting | |
 | `v_meeting_items` | action item | meeting title/date, topic, `assignee_names` |
 | `v_daily_logs` | daily log | |
 | `v_reviews` | document review | approved/rejected counts, step progress (`next_due_date` drives overdue) |
-| `v_forms` | form | template name/type, assignee |
+| `v_forms` | form | template name/type, `assignee_name` (user, company or role) |
 | `v_cost_budgets` | budget line | all budget figures, contract, `is_overrun`, `has_children` |
-| `v_cost_contracts` | contract | company, awarded/revised/forecast figures, `is_overrun` |
+| `v_cost_contracts` | contract | `company_name`, awarded/revised/forecast figures, `is_overrun` |
 | `v_change_orders` | change-order form | `form_type` (pco/rfq/rco/oco/sco), statuses, amounts, `chain_key` |
 | `v_change_order_chains` | real change | `form_types`, `exposure`, `open_legs` |
 | `v_schedule_activities` | activity | schedule name, `completion_pct` (0–100), `is_late` |

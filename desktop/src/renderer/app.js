@@ -385,7 +385,7 @@ function guideBuiltIn() {
   return banner(
     'ok',
     h('b', {}, 'Built in, nothing to install. '),
-    'The forma-data server includes the dashboard guide (house style plus the data rules that keep numbers right). Claude loads it on its own when you ask for a dashboard, in Claude Desktop, Cowork and Claude Code.'
+    'The forma-data server includes the dashboard guide: quick, accurate dashboards drawn right in the chat, plus the data rules that keep the numbers right. Claude loads it on its own when you ask for a dashboard, in Claude Desktop, Cowork and Claude Code.'
   );
 }
 
@@ -436,7 +436,7 @@ function wSkill() {
     'div',
     {},
     h('h1', {}, 'Dashboards'),
-    h('p', { class: 'lead' }, 'Claude builds dashboards from your Forma data using a house style and data rules (status groups, change-order chains, cost variance sign, demo-project labels, and more).'),
+    h('p', { class: 'lead' }, 'Ask for a dashboard and Claude draws a quick one right in the chat, using data rules that keep the numbers right (status groups, change-order chains, cost variance sign, demo-project labels, and more). Ask for a “full dashboard” when you want something bigger to share.'),
     guideBuiltIn(),
     h('details', { class: 'card' }, h('summary', {}, 'Also want it as a skill or plugin? (optional)'), skillTools()),
     wNav({})

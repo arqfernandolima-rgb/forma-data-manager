@@ -12,6 +12,9 @@
  *     draft / open / closed / void (plus info for meeting items).
  *  4. "Today" is the extraction date (AS_OF), not the wall clock, so overdue and
  *     age figures describe the snapshot consistently.
+ *  5. Whoever holds an item gets a name whether it's a user, a company or a role.
+ *     Issues, RFIs and submittals store companies and roles as Oxygen (member
+ *     group) IDs; forms and cost store their admin IDs (see nameLookups).
  */
 
 const q = (id) => `"${String(id).replace(/"/g, '""')}"`;
@@ -31,6 +34,47 @@ export function makeContext(db, asOf) {
   };
   const has = (t, c) => (c ? cols(t).has(c) : cols(t).size > 0);
   return { db, asOf, has, cols, invalidate: (t) => cache.delete(t) };
+}
+
+/**
+ * Scalar name lookups for an ID expression, keyed by what the ID points to. Only sources whose
+ * tables and columns exist in this extract are returned. Aliases start with "_" so they can't
+ * shadow a view's own alias (v_rfis uses "r", v_cost_contracts uses "c").
+ *  - user:          admin_users.autodesk_id
+ *  - companyOxygen: admin_project_companies.company_oxygen_id -> admin_companies.name
+ *  - roleOxygen:    admin_project_roles.role_oxygen_id (the row carries the role name)
+ *  - company/role:  admin_companies.id / admin_roles.id (forms, cost)
+ */
+function nameLookups(ctx, x) {
+  const L = {};
+  if (ctx.has('admin_users', 'autodesk_id') && ctx.has('admin_users', 'name')) L.user = `(SELECT _u.name FROM admin_users _u WHERE _u.autodesk_id = ${x} LIMIT 1)`;
+  if (ctx.has('admin_project_companies', 'company_oxygen_id') && ctx.has('admin_project_companies', 'company_id') && ctx.has('admin_companies', 'name'))
+    L.companyOxygen = `(SELECT _c.name FROM admin_project_companies _pc JOIN admin_companies _c ON _c.id = _pc.company_id WHERE _pc.company_oxygen_id = ${x} LIMIT 1)`;
+  if (ctx.has('admin_project_roles', 'role_oxygen_id') && ctx.has('admin_project_roles', 'name')) L.roleOxygen = `(SELECT _pr.name FROM admin_project_roles _pr WHERE _pr.role_oxygen_id = ${x} LIMIT 1)`;
+  if (ctx.has('admin_companies', 'id') && ctx.has('admin_companies', 'name')) L.company = `(SELECT _c.name FROM admin_companies _c WHERE _c.id = ${x} LIMIT 1)`;
+  if (ctx.has('admin_roles', 'id') && ctx.has('admin_roles', 'name')) L.role = `(SELECT _r.name FROM admin_roles _r WHERE _r.id = ${x} LIMIT 1)`;
+  return L;
+}
+
+const coalesce = (...parts) => {
+  const p = parts.filter(Boolean);
+  return p.length === 0 ? 'NULL' : p.length === 1 ? p[0] : `COALESCE(${p.join(', ')})`;
+};
+
+/** Name of the user, company or role an ID points to; typeExpr (user/company/role) picks the source when known. */
+function partyExpr(ctx, x, typeExpr = null) {
+  const L = nameLookups(ctx, x);
+  const any = coalesce(L.user, L.companyOxygen, L.roleOxygen, L.company, L.role);
+  if (!typeExpr) return any;
+  return `CASE lower(${typeExpr}) WHEN 'company' THEN ${coalesce(L.companyOxygen, L.company)} WHEN 'role' THEN ${coalesce(L.roleOxygen, L.role)} ELSE ${any} END`;
+}
+
+/** Name of a company from its admin ID or its Oxygen ID. */
+function companyExpr(ctx, ...ids) {
+  const parts = [];
+  for (const x of ids) parts.push(nameLookups(ctx, x).company);
+  for (const x of ids) parts.push(nameLookups(ctx, x).companyOxygen);
+  return coalesce(...parts);
 }
 
 /** Small query builder that degrades gracefully when columns are missing. */
@@ -78,6 +122,32 @@ class View {
   }
   user(as, baseCol) {
     return this.lookup(as, 'admin_users', 'name', [['autodesk_id', baseCol]]);
+  }
+  /** Name of a user, company or role (see partyExpr). baseCol may be an array: first non-NULL column wins. */
+  party(as, baseCol, typeCol = null) {
+    const ids = [].concat(baseCol).map((c) => this.ref(c)).filter((r) => r !== 'NULL');
+    if (!ids.length) return this.expr('NULL', as);
+    const id = ids.length === 1 ? ids[0] : `COALESCE(${ids.join(', ')})`;
+    const type = typeCol && this.ctx.has(this.table, typeCol) ? `${this.alias}.${q(typeCol)}` : null;
+    this.select.push(`${partyExpr(this.ctx, id, type)} AS ${q(as)}`);
+    return this;
+  }
+  /** Names for a list of user/company/role IDs stored as {a,b} or ["a","b"], joined with ", ". */
+  partyList(as, baseCol) {
+    const ref = this.ref(baseCol);
+    if (ref === 'NULL') return this.expr('NULL', as);
+    const arr = `CASE WHEN substr(trim(${ref}), 1, 1) = '[' THEN trim(${ref}) ELSE '["' || replace(replace(trim(${ref}, '{} '), ' ', ''), ',', '","') || '"]' END`;
+    const name = partyExpr(this.ctx, '_j.value');
+    this.select.push(
+      `(SELECT group_concat(_nm, ', ') FROM (SELECT ${name} AS _nm FROM json_each(CASE WHEN json_valid(${arr}) THEN ${arr} ELSE '[]' END) _j WHERE _j.value <> '')) AS ${q(as)}`
+    );
+    return this;
+  }
+  /** Company name from admin and/or Oxygen ID columns (first match wins). */
+  company(as, ...baseCols) {
+    const ids = baseCols.map((c) => this.ref(c)).filter((r) => r !== 'NULL');
+    this.select.push(`${ids.length ? companyExpr(this.ctx, ...ids) : 'NULL'} AS ${q(as)}`);
+    return this;
   }
   activeOnly() {
     if (this.ctx.has(this.table, 'deleted_at')) this.where.push(`${this.alias}.deleted_at IS NULL`);
@@ -168,7 +238,7 @@ export const VIEW_DEFS = [
   },
   {
     name: 'v_issues',
-    description: 'ACC issues (active only) with project, type, subtype, root cause, assignee and creator names, status_group, is_overdue, days_overdue, age_days.',
+    description: 'ACC issues (active only) with project, type, subtype, root cause, assignee name (a user, company or role: see assignee_type) and creator name, status_group, is_overdue, days_overdue, age_days.',
     build(ctx) {
       if (!ctx.has('issues_issues')) return null;
       const v = new View(ctx, 'issues_issues', 'i');
@@ -178,7 +248,7 @@ export const VIEW_DEFS = [
       v.lookup('subtype_name', 'issues_issue_subtypes', 'issue_subtype', [['issue_subtype_id', 'subtype_id'], ['bim360_project_id', 'bim360_project_id']]);
       v.lookup('root_cause', 'issues_root_causes', 'title', [['root_cause_id', 'root_cause_id'], ['bim360_project_id', 'bim360_project_id']]);
       v.lookup('root_cause_category', 'issues_root_cause_categories', 'root_cause_category', [['root_cause_category_id', 'root_cause_category_id'], ['bim360_project_id', 'bim360_project_id']]);
-      v.cols('assignee_id', 'assignee_type').user('assignee_name', 'assignee_id').user('created_by_name', 'created_by').user('owner_name', 'owner_id');
+      v.cols('assignee_id', 'assignee_type').party('assignee_name', 'assignee_id', 'assignee_type').user('created_by_name', 'created_by').user('owner_name', 'owner_id');
       v.cols('due_date', 'start_date', 'created_at', 'opened_at', 'closed_at', 'updated_at', 'location_details', 'response', 'published');
       v.activeOnly();
       return withDerived(v.sql(), ctx.asOf);
@@ -196,7 +266,7 @@ export const VIEW_DEFS = [
       v.lookup('subtype_name', 'issuesbim360_issue_subtypes', 'issue_subtype', [['issue_subtype_id', 'subtype_id'], ['bim360_project_id', 'bim360_project_id']]);
       v.lookup('root_cause', 'issuesbim360_root_causes', 'title', [['root_cause_id', 'root_cause_id'], ['bim360_project_id', 'bim360_project_id']]);
       v.lookup('root_cause_category', 'issuesbim360_root_cause_categories', 'root_cause_category', [['root_cause_category_id', 'root_cause_category_id'], ['bim360_project_id', 'bim360_project_id']]);
-      v.cols('assignee_id', 'assignee_type').user('assignee_name', 'assignee_id').user('created_by_name', 'created_by').user('owner_name', 'owner_id');
+      v.cols('assignee_id', 'assignee_type').party('assignee_name', 'assignee_id', 'assignee_type').user('created_by_name', 'created_by').user('owner_name', 'owner_id');
       v.cols('due_date', 'start_date', 'created_at', 'opened_at', 'closed_at', 'updated_at', 'location_details', 'response', 'published');
       v.activeOnly();
       return withDerived(v.sql(), ctx.asOf);
@@ -215,7 +285,7 @@ export const VIEW_DEFS = [
   },
   {
     name: 'v_rfis',
-    description: 'RFIs (active only when the extract tracks deletion) with project, manager and creator names, status_group (submitted/open/openRevN/answered* count as open), is_overdue, days_overdue, age_days.',
+    description: 'RFIs (active only when the extract tracks deletion) with project, manager name (user, company or role: see manager_type), creator name, status_group (submitted/open/openRevN/answered* count as open), is_overdue, days_overdue, age_days.',
     build(ctx) {
       if (!ctx.has('rfis_rfis')) return null;
       const v = new View(ctx, 'rfis_rfis', 'r');
@@ -223,7 +293,7 @@ export const VIEW_DEFS = [
       v.expr(statusGroup('r.status', { draft: ['draft'], closed: ['closed'], void: ['void'] }), 'status_group', ['status']);
       v.cols('priority', 'rfi_type', 'cost_impact', 'schedule_impact', 'reference', 'location_id');
       v.cols('due_date', 'created_at', 'opened_at', 'answered_at', 'responded_at', 'closed_at', 'updated_at');
-      v.user('manager_name', 'manager_id').user('created_by_name', 'created_by').user('answered_by_name', 'answered_by');
+      v.col('manager_type').party('manager_name', 'manager_id', 'manager_type').user('created_by_name', 'created_by').user('answered_by_name', 'answered_by');
       v.cols('official_response', 'official_response_status', 'suggested_answer');
       v.activeOnly();
       return withDerived(v.sql(), ctx.asOf);
@@ -231,7 +301,7 @@ export const VIEW_DEFS = [
   },
   {
     name: 'v_submittals',
-    description: 'ACC submittal items (active only when tracked) with project, status (status_value), status_group, response, priority, spec, package, ball in court, is_overdue, days_overdue, age_days.',
+    description: 'ACC submittal items (active only when tracked) with project, status (status_value), status_group, response, priority, spec, package, ball in court (ball_in_court_names: users, companies and roles), manager_name, subcontractor_name, is_overdue, days_overdue, age_days.',
     build(ctx) {
       if (!ctx.has('submittalsacc_items')) return null;
       const v = new View(ctx, 'submittalsacc_items', 's');
@@ -240,6 +310,7 @@ export const VIEW_DEFS = [
       v.expr(statusGroup('s.status_value', { draft: ['draft'], closed: ['closed'], void: ['void'] }), 'status_group', ['status_value']);
       v.col('response_value', 'response').col('priority_value', 'priority');
       v.cols('spec_identifier', 'package_title', 'package_identifier', 'ball_in_court', 'revision', 'manager', 'subcontractor');
+      v.partyList('ball_in_court_names', 'ball_in_court').party('manager_name', 'manager').party('subcontractor_name', 'subcontractor');
       v.cols('due_date', 'required_on_job_date', 'required_approval_date', 'lead_time', 'manager_due_date', 'submitter_due_date', 'created_at', 'updated_at', 'responded_at', 'published_date');
       v.user('created_by_name', 'created_by');
       v.activeOnly();
@@ -256,7 +327,7 @@ export const VIEW_DEFS = [
       v.lookup('category_name', 'assets_categories', 'name', [['id', 'category_id'], ['bim360_project_id', 'bim360_project_id']]);
       v.lookup('status_label', 'assets_asset_statuses', 'label', [['id', 'status_id'], ['bim360_project_id', 'bim360_project_id']]);
       v.lookup('status_sort_order', 'assets_asset_statuses', 'sort_order', [['id', 'status_id'], ['bim360_project_id', 'bim360_project_id']]);
-      v.lookup('company_name', 'admin_companies', 'name', [['id', 'company_id']]);
+      v.company('company_name', 'company_id');
       v.cols('created_at', 'updated_at').user('created_by_name', 'created_by');
       v.activeOnly();
       return v.sql();
@@ -321,7 +392,7 @@ export const VIEW_DEFS = [
       if (!ctx.has('dailylogs_dailylogs')) return null;
       const v = new View(ctx, 'dailylogs_dailylogs', 'd');
       v.col('id').project().cols('date', 'status', 'created_at', 'published_at');
-      v.lookup('company_name', 'admin_companies', 'name', [['id', 'company_id']]);
+      v.company('company_name', 'company_id');
       v.user('created_by_name', 'created_by').user('published_by_name', 'published_by');
       v.activeOnly();
       return v.sql();
@@ -343,7 +414,7 @@ export const VIEW_DEFS = [
   },
   {
     name: 'v_forms',
-    description: 'Forms with project, template name/type, status_group (closed/archived = closed, discarded = void), assignee, form date, is_overdue.',
+    description: 'Forms with project, template name/type, status_group (closed/archived = closed, discarded = void), assignee name (user, company or role: see assignee_type), form date, is_overdue.',
     build(ctx) {
       if (!ctx.has('forms_forms')) return null;
       const v = new View(ctx, 'forms_forms', 'f');
@@ -351,7 +422,8 @@ export const VIEW_DEFS = [
       v.expr(statusGroup('f.status', { draft: ['draft'], closed: ['closed', 'archived', 'submitted'], void: ['discarded', 'void', 'deleted'] }), 'status_group', ['status']);
       v.lookup('template_name', 'forms_form_templates', 'name', [['id', 'template_id']]);
       v.lookup('template_type', 'forms_form_templates', 'template_type', [['id', 'template_id']]);
-      v.cols('assignee_id', 'assignee_type').user('assignee_name', 'assignee_id');
+      v.expr(coalesce(...['assignee_type_id', 'assignee_id'].map((c) => v.ref(c)).filter((r) => r !== 'NULL')), 'assignee_id').col('assignee_type');
+      v.party('assignee_name', ['assignee_type_id', 'assignee_id'], 'assignee_type');
       v.cols('form_date', 'due_date', 'last_submitted_at', 'created_at', 'updated_at', 'description', 'notes').user('created_by_name', 'created_by');
       v.activeOnly();
       return withDerived(v.sql(), ctx.asOf);
@@ -381,7 +453,8 @@ export const VIEW_DEFS = [
       if (!ctx.has('cost_contracts')) return null;
       const v = new View(ctx, 'cost_contracts', 'c');
       v.col('id', 'contract_id').project().cols('code', 'name', 'type', 'status', 'currency');
-      v.lookup('company_name', 'admin_companies', 'name', [['id', 'company_id']]);
+      // company_uid is the admin company ID; company_id is the Oxygen ID (matching on it found nothing).
+      v.company('company_name', 'company_uid', 'company_id');
       v.cols('awarded', 'original_budget', 'revised', 'approved_change_orders', 'pending_change_orders', 'actual_cost', 'projected_cost', 'forecast_final_cost', 'forecast_variance', 'uncommitted', 'compliance_status');
       v.expr(`CASE WHEN c.forecast_variance IS NULL THEN NULL WHEN c.forecast_variance < 0 THEN 1 ELSE 0 END`, 'is_overrun', ['forecast_variance']);
       v.cols('awarded_at', 'executed_at', 'status_changed_at', 'created_at', 'updated_at');

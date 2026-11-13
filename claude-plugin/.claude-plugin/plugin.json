@@ -1,6 +1,6 @@
 {
   "name": "forma-data",
-  "version": "4.0.0",
+  "version": "4.2.0",
   "description": "Dashboard house style and data rules for Autodesk Forma data served by the forma-data MCP server. Unofficial community project, provided as is; not affiliated with Autodesk.",
   "author": {
     "name": "Fernando Lima"

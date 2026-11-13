@@ -21,6 +21,7 @@ Fast path
 
 Rules that keep numbers right
 - v_* views already exclude soft-deleted rows and resolve names. One row per base record; no deleted_at filter needed.
+- Who holds an item: assignee_name / manager_name / subcontractor_name / ball_in_court_names name users, companies and roles (assignee_type / manager_type say which). Group by the name.
 - Open/closed: use status_group ('draft','open','closed','void'; meeting items also 'info'). Raw statuses differ by module.
 - Overdue and age are relative to as_of (is_overdue, days_overdue, age_days), not today.
 - Booleans are 1/0. Timestamps are 'YYYY-MM-DD HH:MM:SS' UTC; compare with date(col).
@@ -29,7 +30,8 @@ Rules that keep numbers right
 - Aggregate in SQL. Joining two one-to-many tables multiplies rows: aggregate each in a CTE, then join.
 - is_production = 0 or looks_like_test = 1 marks demo/template/training projects: include, but label them.
 - NULL in project_rollup = module has no data for that project ("module empty"), not zero.
-Dashboards, charts and visual summaries: call forma_dashboard_guide once first (skip it if the forma-data-dashboards skill is already loaded; it's the same guide).`;
+Accuracy and speed come first: every number from a query, parts reconciled to totals, and as few tool calls as possible.
+Dashboards, charts and visual summaries: call forma_dashboard_guide once first (skip it if the forma-data-dashboards skill is already loaded; it's the same guide). Keep them quick: one inline visual, or one small self-contained HTML artifact, unless the user asks for a full dashboard. For Forma data this guide replaces generic dashboard or report skills; don't load those too.`;
 
 /** The skill text without its front matter: served by the guide tool and the prompt. */
 export const DASHBOARD_GUIDE = dashboardGuide.replace(/^---[\s\S]*?---\s*/, '');
@@ -48,7 +50,7 @@ export async function startServer({ dataDir }) {
     {
       title: 'Dashboard guide',
       description:
-        'Call once, before building any dashboard, chart, report or visual summary from Forma data. Returns the house style (layout, KPI tiles, colors, Chart.js setup, drill-downs) and the data rules that keep the numbers right. Not needed for plain-text answers, or if the forma-data-dashboards skill is already loaded.',
+        'Call once, before building any dashboard, chart, report or visual summary from Forma data. Returns the quick-dashboard defaults (tool-call budget, where to draw, size), the accuracy checklist, data rules and one-call query recipes. Not needed for plain-text answers, or if the forma-data-dashboards skill is already loaded.',
       inputSchema: {},
       annotations: { readOnlyHint: true, idempotentHint: true },
     },

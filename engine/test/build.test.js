@@ -214,3 +214,60 @@ describe('changes since the previous extract', () => {
     expect(open.filter((f) => /forma-changes-.*\.db$/.test(f))).toEqual([]);
   });
 });
+
+describe('who holds an item: users, companies and roles', () => {
+  let pdb;
+  beforeAll(async () => {
+    const src = tmpDir('forma-src-');
+    writeMiniExtract(src, { parties: true });
+    const dir = tmpDir('forma-data-');
+    await buildDatabase({ csvDir: src, dataDir: dir });
+    pdb = new Database(path.join(dir, readPointer(dir).db), { readonly: true });
+  });
+  const name = (sql, id) => pdb.query(sql).get(id);
+
+  test('issues assigned to a company or role show its name (Oxygen IDs), users still resolve', () => {
+    expect(name('SELECT assignee_name, assignee_type FROM v_issues WHERE issue_id = ?', 'I6')).toEqual({ assignee_name: 'Gensler', assignee_type: 'company' });
+    expect(name('SELECT assignee_name FROM v_issues WHERE issue_id = ?', 'I7').assignee_name).toBe('Architect');
+    expect(name('SELECT assignee_name FROM v_issues WHERE issue_id = ?', 'I2').assignee_name).toBe('Ben Ortiz');
+  });
+
+  test('a company or role listed in several projects never duplicates rows', () => {
+    const base = pdb.query("SELECT COUNT(*) AS n FROM issues_issues WHERE deleted_at IS NULL").get().n;
+    expect(pdb.query('SELECT COUNT(*) AS n FROM v_issues').get().n).toBe(base);
+    expect(pdb.query('SELECT COUNT(*) AS n FROM v_submittals').get().n).toBe(4);
+    expect(pdb.query('SELECT COUNT(*) AS n FROM v_cost_contracts').get().n).toBe(3);
+  });
+
+  test('RFI managers can be roles', () => {
+    expect(name('SELECT manager_name, manager_type FROM v_rfis WHERE rfi_id = ?', 'R3')).toEqual({ manager_name: 'Architect', manager_type: 'role' });
+    expect(name('SELECT manager_name FROM v_rfis WHERE rfi_id = ?', 'R1').manager_name).toBe('Ben Ortiz');
+  });
+
+  test('submittals: ball in court, manager and subcontractor names; odd values are skipped, not errors', () => {
+    expect(name('SELECT ball_in_court_names, manager_name, subcontractor_name FROM v_submittals WHERE id = ?', 'S1')).toEqual({
+      ball_in_court_names: 'Ben Ortiz, Gensler, Architect',
+      manager_name: 'Ana Silva',
+      subcontractor_name: 'Gensler',
+    });
+    expect(name('SELECT ball_in_court_names, manager_name FROM v_submittals WHERE id = ?', 'S2')).toEqual({ ball_in_court_names: null, manager_name: 'Architect' });
+    expect(name('SELECT ball_in_court_names FROM v_submittals WHERE id = ?', 'S3').ball_in_court_names).toBe('Ana Silva');
+    expect(name('SELECT ball_in_court_names FROM v_submittals WHERE id = ?', 'S4').ball_in_court_names).toBeNull();
+    expect(pdb.query('SELECT COUNT(ball_in_court_names) AS n FROM v_submittals').get().n).toBe(2);
+  });
+
+  test('forms assigned to companies and roles use their admin IDs', () => {
+    expect(name('SELECT assignee_name, assignee_id FROM v_forms WHERE id = ?', 'F1')).toEqual({ assignee_name: 'CREO', assignee_id: 'CO-B' });
+    expect(name('SELECT assignee_name FROM v_forms WHERE id = ?', 'F2').assignee_name).toBe('Architect');
+    expect(name('SELECT assignee_name FROM v_forms WHERE id = ?', 'F3').assignee_name).toBe('Ana Silva');
+  });
+
+  test('contracts find their company from company_uid, or from the Oxygen company_id', () => {
+    const rows = pdb.query('SELECT contract_id, company_name FROM v_cost_contracts ORDER BY contract_id').all();
+    expect(rows).toEqual([
+      { contract_id: 'K1', company_name: 'Gensler' },
+      { contract_id: 'K2', company_name: 'CREO' },
+      { contract_id: 'K3', company_name: 'Gensler' },
+    ]);
+  });
+});

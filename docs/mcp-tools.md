@@ -69,7 +69,7 @@ Covers issues, issue/RFI comments, RFIs, submittals, meetings, topics, action it
 
 ## `forma_dashboard_guide`
 
-No arguments. Returns the dashboard house style and data rules as plain text (~10K characters). This is the [dashboard skill](../claude-plugin/skills/forma-data-dashboards/SKILL.md), built into the server: the tool description and the server instructions tell Claude to call it once before building any dashboard, chart or visual summary. Nothing has to be installed, and it works in every MCP client. If the skill is also installed, Claude skips the tool.
+No arguments. Returns the quick-dashboard defaults (about 4 tool calls before drawing; one inline visual or one small self-contained artifact; no dataset uploads or dashboard artifact types unless asked), the accuracy checklist, data rules and one-call query recipes, as plain text (~9K characters). This is the [dashboard skill](../claude-plugin/skills/forma-data-dashboards/SKILL.md), built into the server: the tool description and the server instructions tell Claude to call it once before building any dashboard, chart or visual summary. Nothing has to be installed, and it works in every MCP client. If the skill is also installed, Claude skips the tool.
 
 ## Prompt: `forma_dashboard`
 
